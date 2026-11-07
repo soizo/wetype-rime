@@ -1,6 +1,6 @@
 schema:
   schema_id: wetype
-  name: wetype
+  name: WeTypeRime
   version: "0.1"
   description: 微信原生引擎、本地词库和学习，完全离线
 switches:
@@ -11,6 +11,9 @@ switches:
     reset: 1
     states: [前文联想关, 前文联想开]
     abbrev: [前文关, 前文开]
+  - options: ["wetype_mode_quanpin", "wetype_mode_flypy", "wetype_mode_natural", "wetype_mode_microsoft", "wetype_mode_sogou", "wetype_mode_ziguang", "wetype_mode_abc", "wetype_mode_jiajia", "wetype_mode_wubi86", "wetype_mode_wubi98", "wetype_mode_wubi_new"]
+    states: ["输入：全拼", "输入：小鹤双拼", "输入：自然码双拼", "输入：微软双拼", "输入：搜狗双拼", "输入：紫光双拼", "输入：智能 ABC 双拼", "输入：拼音加加双拼", "输入：86 五笔", "输入：98 五笔", "输入：新世纪五笔"]
+    abbrev: ["全拼", "小鹤", "自然码", "微软", "搜狗", "紫光", "智能 ABC", "拼音加加", "86 五笔", "98 五笔", "新世纪五笔"]
 engine:
   processors:
     - lua_processor@*wetype_bootstrap
@@ -46,3 +49,8 @@ ascii_composer:
   switch_key:
     Shift_L: commit_code
     Shift_R: commit_code
+
+# 安装器生成机器相关的路径；方案本身保留在项目中供用户修改。
+wetype:
+  __include: wetype.runtime:/wetype
+  mode: selectable

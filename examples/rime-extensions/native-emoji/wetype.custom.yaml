@@ -1,0 +1,7 @@
+# 可选：由 WeType 本地引擎推荐 Unicode Emoji，保留其排序和选词反馈。
+patch:
+  wetype/emoji_option: emoji
+  "switches/@next":
+    name: emoji
+    reset: 1
+    states: [Emoji关, Emoji开]

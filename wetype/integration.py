@@ -9,8 +9,8 @@ import shutil
 import subprocess
 import tempfile
 from datetime import datetime
-from .macos import ROOT, DEFAULT_ENGINE, verify
-from .modes import MODES, SCHEMAS, WUBI_DICTS, SAVE_OPTIONS_PATCH, native_header
+from .macos import ROOT, DEFAULT_ENGINE, verify, dictionary_rows
+from .modes import SCHEMAS, WUBI_DICTS, SAVE_OPTIONS_PATCH, native_header
 
 SQUIRREL = Path('/Library/Input Methods/Squirrel.app/Contents')
 DEFAULT_SOURCE = Path(os.environ.get('WETYPE_RIME_SOURCE', str(ROOT / '.local/librime')))
@@ -56,6 +56,34 @@ def atomic_copy(source: Path, target: Path) -> None:
         Path(temporary).unlink(missing_ok=True)
 
 
+def sync_configs(rime_dir: Path) -> Path | None:
+    """Copy editable configuration verbatim, keeping runtime bindings separate."""
+    source = ROOT / 'rime'
+    required = [source / (schema + '.schema.yaml') for schema in SCHEMAS]
+    for path in required:
+        if not path.is_file():
+            raise ValueError(f'missing scheme configuration: {path}')
+    files = sorted([*source.glob('*.yaml'), *source.glob('*.txt'), *source.glob('lua/*.lua')])
+    if any(path.name == 'wetype.runtime.yaml' for path in files):
+        raise ValueError('wetype.runtime.yaml is reserved for installation-specific bindings')
+    backup = None
+    for path in files:
+        relative = path.relative_to(source)
+        target = rime_dir / relative
+        if target.exists():
+            if target.read_bytes() == path.read_bytes():
+                continue
+            if backup is None:
+                parent = ROOT / '.local/backups'
+                parent.mkdir(parents=True, exist_ok=True)
+                backup = Path(tempfile.mkdtemp(prefix='config-', dir=parent))
+            saved = backup / relative
+            saved.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(target, saved)
+        atomic_copy(path, target)
+    return backup
+
+
 def stage(rime_dir: Path, runtime: Path, engine: Path = DEFAULT_ENGINE, copy_engine: bool = True) -> None:
     rime_dir, runtime, engine = rime_dir.resolve(), runtime.resolve(), engine.resolve()
     manifest = verify(engine)
@@ -71,12 +99,15 @@ def stage(rime_dir: Path, runtime: Path, engine: Path = DEFAULT_ENGINE, copy_eng
     if copy_engine:
         target = runtime / 'engine'
         if target.exists():
-            verify(target)
+            installed = verify(target)
+            if (installed["source_sha256"] != manifest["source_sha256"]
+                    or installed["files"] != manifest["files"]):
+                raise ValueError("runtime contains a different engine; choose a new --runtime directory")
         else:
             shutil.copytree(engine, target, symlinks=True)
         engine = target
     atomic_copy(ROOT / 'native/offline.sb', runtime / 'offline.sb')
-    rows = json.loads((engine / 'imeData.bundle/index.json').read_text())
+    rows = dictionary_rows(engine / 'imeData.bundle')
     rows = sorted((r for r in rows if not r.get('is_cell')), key=lambda r: r['type'] != 262144)
     state = runtime / 'state'
     q = shlex.quote
@@ -105,25 +136,14 @@ def stage(rime_dir: Path, runtime: Path, engine: Path = DEFAULT_ENGINE, copy_eng
         path = runtime / ('bin/start-engine' + suffix)
         path.write_text(launcher);path.chmod(0o755)
         launchers[group] = str(path)
-    (rime_dir / 'lua').mkdir(parents=True, exist_ok=True)
-    atomic_copy(ROOT / 'rime/lua/wetype_bootstrap.lua', rime_dir / 'lua/wetype_bootstrap.lua')
-    template = (ROOT / 'rime/wetype.schema.yaml').read_text()
-    for schema_id in SCHEMAS:
-        fixed = next((m for m in MODES if schema_id == 'wetype_' + m['id']), None)
-        schema = template.replace('schema_id: wetype\n', 'schema_id: ' + schema_id + '\n')
-        if fixed:
-            schema = schema.replace('name: wetype\n', 'name: ' + json.dumps('wetype · ' + fixed['label'],ensure_ascii=False) + '\n')
-        else:
-            options = '  - options: ' + json.dumps(['wetype_mode_' + m['id'] for m in MODES]) + '\n'
-            options += '    states: ' + json.dumps(['输入：' + m['label'] for m in MODES],ensure_ascii=False) + '\n'
-            options += '    abbrev: ' + json.dumps([m['label'].replace('双拼','').strip() for m in MODES],ensure_ascii=False) + '\n'
-            schema = schema.replace('engine:\n', options + 'engine:\n', 1)
-        settings = {'module':str(runtime / 'bin' / module_name), 'launcher':launchers['pinyin'],
-                    'launchers':launchers, 'mode':fixed['id'] if fixed else 'selectable',
-                    'log_file':str(state / 'logs/rime.log')}
-        # A JSON document is valid YAML and avoids an additional dependency.
-        schema += '\nwetype: ' + json.dumps(settings,ensure_ascii=False) + '\n'
-        (rime_dir / (schema_id + '.schema.yaml')).write_text(schema)
+    sync_configs(rime_dir)
+    settings = {'module':str(runtime / 'bin' / module_name), 'launcher':launchers['pinyin'],
+                'launchers':launchers, 'log_file':str(state / 'logs/rime.log')}
+    # Machine-specific bindings are the only generated YAML. Schemes include
+    # this node through Rime's native __include mechanism.
+    (rime_dir / 'wetype.runtime.yaml').write_text(
+        '# Generated interface paths; edit schemes in the project rime/ directory.\n'
+        + json.dumps({'wetype': settings}, ensure_ascii=False, indent=2) + '\n')
 
 
 def register_scheme(rime_dir: Path) -> Path | None:

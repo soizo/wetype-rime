@@ -1,0 +1,13 @@
+# 可选：默认仍输出简体，用户从方案选项菜单启用繁体。
+patch:
+  "switches/@next":
+    name: wetype_traditional
+    reset: 0
+    states: [简体, 繁體]
+  "engine/filters/+":
+    - simplifier@traditional
+    - uniquifier
+  traditional:
+    option_name: wetype_traditional
+    opencc_config: s2t.json
+    tips: none

@@ -1,9 +1,10 @@
 import json
 from pathlib import Path
+import plistlib
 import struct
 import tempfile
 import unittest
-from wetype.macos import SOURCE_SHA256, convert_image, sha256, verify
+from wetype.macos import SOURCE_SHA256, convert_image, sha256, verify, discover, dictionary_rows
 
 
 def executable():
@@ -74,6 +75,62 @@ class ManifestTests(unittest.TestCase):
             (root / 'manifest.json').write_text(json.dumps(manifest))
             with self.assertRaisesRegex(ValueError, 'escapes'):
                 verify(root)
+
+
+class DiscoveryTests(unittest.TestCase):
+    def fixture(self, root):
+        contents = root / 'Future.app/Contents'
+        (contents / 'MacOS').mkdir(parents=True)
+        (contents / 'MacOS/RenamedEngine').write_bytes(executable())
+        (contents / 'Info.plist').write_bytes(plistlib.dumps({
+            'CFBundleExecutable': 'RenamedEngine',
+            'CFBundleShortVersionString': '99.2', 'CFBundleVersion': '9000'}))
+        resources = contents / 'Resources/new-layout/models'
+        resources.mkdir(parents=True)
+        (resources / 'nested').mkdir()
+        (resources / 'nested/pinyin.dat').write_bytes(b'dictionary')
+        rows = [{'name': 'nested/pinyin.dat', 'type': 262144, 'version': 12}]
+        (resources / 'index.json').write_text(json.dumps(rows))
+        return contents.parent, resources, rows
+
+    def test_future_version_renamed_binary_and_nested_dictionary(self):
+        with tempfile.TemporaryDirectory() as temp:
+            app, resources, _ = self.fixture(Path(temp))
+            result = discover(app)
+            self.assertEqual(result['app_version'], '99.2')
+            self.assertEqual(result['source_resources'], str(resources.resolve()))
+            self.assertEqual(result['compatibility'], 'unvalidated')
+            self.assertEqual(result['dictionary_count'], 1)
+
+    def test_ambiguous_indexes_require_explicit_choice(self):
+        with tempfile.TemporaryDirectory() as temp:
+            app, resources, _ = self.fixture(Path(temp))
+            import shutil
+            shutil.copytree(resources, resources.parent / 'other')
+            with self.assertRaisesRegex(ValueError, '2 dictionary indexes'):
+                discover(app)
+            self.assertEqual(discover(app, resources)['dictionary_count'], 1)
+
+    def test_rejects_bad_checksum_paths_and_loader_fields(self):
+        with tempfile.TemporaryDirectory() as temp:
+            _, resources, rows = self.fixture(Path(temp))
+            for changes in ({'md5': '0' * 32}, {'name': '../outside'},
+                            {'name': 'bad\tname'}, {'type': -1}, {'version': '12'}):
+                (resources / 'index.json').write_text(json.dumps([dict(rows[0], **changes)]))
+                with self.subTest(changes=changes), self.assertRaises(ValueError):
+                    dictionary_rows(resources)
+
+    def test_new_manifest_accepts_other_source_hash(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            (root / 'engine.bundle').write_bytes(b'future')
+            (root / 'imeData.bundle').mkdir()
+            (root / 'imeData.bundle/index.json').write_text('[]')
+            files = {name: {'sha256': sha256(root / name)} for name in
+                     ('engine.bundle', 'imeData.bundle/index.json')}
+            (root / 'manifest.json').write_text(json.dumps({
+                'format': 2, 'source_sha256': 'a' * 64, 'files': files}))
+            self.assertEqual(verify(root)['format'], 2)
 
 
 if __name__ == '__main__':

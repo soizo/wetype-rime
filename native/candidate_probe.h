@@ -3,6 +3,7 @@
 #include <pthread.h>
 #include <stdint.h>
 #include <stdbool.h>
+#include "session_options.h"
 
 typedef struct {
     void *fd;
@@ -103,6 +104,7 @@ static int run_candidates(void *h, const char *work_dir, const char *dict_table,
     config[58] = 1; config[60] = 1; config[174] = 1;
     config[248] = 1; /* group info unknown; no sync setup */
     config[308] = 1; /* disable cloud merge */
+    wetype_session_emoji(config, getenv("WETYPE_EMOJI") != NULL);
     const char *app_name = "WetypeRime";
     memcpy(config + 192, &app_name, sizeof(app_name));
     uint32_t app_len = 10; memcpy(config + 220, &app_len, sizeof(app_len));

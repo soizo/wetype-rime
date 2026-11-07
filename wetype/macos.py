@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import platform
+import plistlib
 import re
 import shutil
 import struct
@@ -18,8 +19,7 @@ ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_ENGINE = ROOT / '.local/engines/macos-3.0.1-680'
 SOURCE_SHA256 = '54e4aa54cd5c125455bdd667bbc2f5d762b73d85064826755e7f1d56a9dbb866'
 ENGINE_VERSION = '0.45.0.weekly_release/2026.09.23.b2f7520b2'
-FRAMEWORKS = ('Sparkle.framework', 'wcwss.framework', 'flurry.framework',
-              'WXP2PTransferDyn.framework', 'libswift_Concurrency.dylib')
+
 
 
 def sha256(path: Path) -> str:
@@ -28,7 +28,7 @@ def sha256(path: Path) -> str:
 
 
 def convert_image(data: bytes) -> bytes:
-    """Turn the supported executable's copy into a loadable Mach-O bundle.
+    """Turn an arm64 executable's copy into a loadable Mach-O bundle.
 
     Keep the empty PAGEZERO load command so compressed rebase/bind segment
     indices stay unchanged. Only its reservation is reduced to zero. Code,
@@ -79,43 +79,98 @@ def _host_check() -> None:
         raise ValueError('this native probe currently requires Apple Silicon macOS')
 
 
-def prepare(app: Path, output: Path) -> Path:
+def dictionary_rows(resources: Path) -> list[dict]:
+    """Validate the loader contract and all indexed files before copying/loading."""
+    entries = json.loads((resources / 'index.json').read_text())
+    if not isinstance(entries, list) or not entries:
+        raise ValueError('dictionary index must be a nonempty list')
+    seen = set()
+    for entry in entries:
+        if not isinstance(entry, dict):
+            raise ValueError('invalid dictionary index entry')
+        name = entry.get('name')
+        if (not isinstance(name, str) or not name or Path(name).is_absolute()
+                or '..' in Path(name).parts or any(c in name for c in '\t\r\n\0')):
+            raise ValueError(f'unsafe dictionary name: {name}')
+        if name in seen:
+            raise ValueError(f'duplicate dictionary name: {name}')
+        seen.add(name)
+        path = resources / name
+        if not path.resolve().is_relative_to(resources.resolve()) or not path.is_file():
+            raise ValueError(f'dictionary missing or escapes resources: {name}')
+        for field in ('type', 'version'):
+            value = entry.get(field)
+            if type(value) is not int or not 0 <= value <= 0xffffffff:
+                raise ValueError(f'invalid dictionary {field}: {name}')
+        for algorithm in ('md5', 'sha256'):
+            expected = entry.get(algorithm)
+            if expected is not None:
+                with path.open('rb') as stream:
+                    digest = hashlib.file_digest(stream, algorithm).hexdigest()
+                if not isinstance(expected, str) or digest != expected.lower():
+                    raise ValueError(f'dictionary checksum differs: {name}')
+    return entries
+
+
+def discover(app: Path, resources: Path | None = None) -> dict:
+    """Inspect local metadata without loading vendor code or pinning a version."""
+    app = app.resolve()
+    with (app / 'Contents/Info.plist').open('rb') as stream:
+        info = plistlib.load(stream)
+    name = info.get('CFBundleExecutable')
+    if not isinstance(name, str) or Path(name).name != name or name in ('', '.', '..'):
+        raise ValueError('invalid CFBundleExecutable')
+    source = app / 'Contents/MacOS' / name
+    if not source.resolve().is_relative_to(app) or not source.is_file():
+        raise ValueError('application executable missing or escapes app')
+    if resources is None:
+        candidates = []
+        for index in sorted((app / 'Contents').rglob('index.json')):
+            try:
+                dictionary_rows(index.parent)
+            except (ValueError, OSError, KeyError, TypeError):
+                continue
+            candidates.append(index.parent)
+        if len(candidates) != 1:
+            raise ValueError(f'found {len(candidates)} dictionary indexes; specify --resources explicitly')
+        resources = candidates[0]
+    resources = resources.resolve()
+    rows = dictionary_rows(resources)
+    digest = sha256(source)
+    return {'source_app': str(app), 'source_executable': str(source),
+            'source_resources': str(resources), 'source_sha256': digest,
+            'app_version': str(info.get('CFBundleShortVersionString', 'unknown')),
+            'build': str(info.get('CFBundleVersion', 'unknown')),
+            'engine_version': ENGINE_VERSION if digest == SOURCE_SHA256 else 'unknown',
+            'compatibility': 'validated' if digest == SOURCE_SHA256 else 'unvalidated',
+            'dictionary_count': len(rows)}
+
+
+def prepare(app: Path, output: Path, resources: Path | None = None) -> Path:
     _host_check()
     app, output = app.resolve(), output.resolve()
     if output.is_relative_to(app):
         raise ValueError('output must be independent of the source app')
-    source = app / 'Contents/MacOS/WeType'
-    if sha256(source) != SOURCE_SHA256:
-        raise ValueError('this adapter supports the checked Mac 3.0.1 (680) binary only; source SHA256 differs')
+    metadata = discover(app, resources)
+    source = Path(metadata['source_executable'])
     if output.exists():
         raise ValueError(f'output already exists; verify it or choose a new directory: {output}')
     output.parent.mkdir(parents=True, exist_ok=True)
     staging = Path(tempfile.mkdtemp(prefix='.prepare-', dir=output.parent))
     try:
         image = staging / 'engine.bundle'
-        subprocess.run(['/usr/bin/lipo', str(source), '-thin', 'arm64', '-output', str(image)], check=True)
+        subprocess.run(['/usr/bin/lipo', str(source), '-thin', 'arm64', '-output', str(image)], check=True, timeout=60)
         image.write_bytes(convert_image(image.read_bytes()))
         frameworks = staging / 'Frameworks'
         frameworks.mkdir()
-        for name in FRAMEWORKS:
-            src, dst = app / 'Contents/Frameworks' / name, frameworks / name
-            if src.is_dir():
-                shutil.copytree(src, dst, symlinks=True)
-            else:
-                shutil.copy2(src, dst)
+        # Preserve the full dependency tree rather than a release-specific list.
+        source_frameworks = app / 'Contents/Frameworks'
+        if source_frameworks.is_dir():
+            shutil.copytree(source_frameworks, frameworks, symlinks=True, dirs_exist_ok=True)
         resources = staging / 'imeData.bundle'
-        shutil.copytree(app / 'Contents/Resources/imeData.bundle', resources)
-        entries = json.loads((resources / 'index.json').read_text())
-        for entry in entries:
-            name = entry['name']
-            if Path(name).name != name or name in ('.', '..'):
-                raise ValueError(f'unsafe dictionary name: {name}')
-            path = resources / name
-            with path.open('rb') as f:
-                digest = hashlib.file_digest(f, 'md5').hexdigest()
-            if digest != entry['md5']:
-                raise ValueError(f'dictionary checksum differs: {name}')
-        subprocess.run(['/usr/bin/codesign', '--force', '--sign', '-', str(image)], check=True)
+        shutil.copytree(Path(metadata['source_resources']), resources)
+        dictionary_rows(resources)
+        subprocess.run(['/usr/bin/codesign', '--force', '--sign', '-', str(image)], check=True, timeout=60)
         files = {}
         for p in sorted(staging.rglob('*')):
             if p.is_symlink():
@@ -124,9 +179,7 @@ def prepare(app: Path, output: Path) -> Path:
                 files[p.relative_to(staging).as_posix()] = {'symlink': os.readlink(p)}
             elif p.is_file():
                 files[p.relative_to(staging).as_posix()] = {'sha256': sha256(p)}
-        manifest = {'format': 1, 'source_app': str(app), 'source_sha256': SOURCE_SHA256,
-                    'app_version': '3.0.1', 'build': '680', 'engine_version': ENGINE_VERSION,
-                    'files': files}
+        manifest = dict(metadata, format=2, files=files)
         (staging / 'manifest.json').write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + '\n')
         staging.rename(output)
     finally:
@@ -138,7 +191,8 @@ def prepare(app: Path, output: Path) -> Path:
 def verify(engine: Path) -> dict:
     engine = engine.resolve()
     manifest = json.loads((engine / 'manifest.json').read_text())
-    if manifest.get('format') != 1 or manifest.get('source_sha256') != SOURCE_SHA256:
+    if (manifest.get('format') not in (1, 2)
+            or not re.fullmatch(r'[0-9a-f]{64}', str(manifest.get('source_sha256', '')))):
         raise ValueError('unrecognized engine manifest')
     files = manifest.get('files', {})
     if 'engine.bundle' not in files or 'imeData.bundle/index.json' not in files:
@@ -158,7 +212,7 @@ def verify(engine: Path) -> dict:
     return manifest
 
 
-def probe(engine: Path, input_text: str, state: str, select: str | None = None) -> dict:
+def probe(engine: Path, input_text: str, state: str, select: str | None = None, emoji: bool = False) -> dict:
     _host_check()
     if not re.fullmatch(r"[a-z']{1,128}", input_text):
         raise ValueError('probe input must contain 1–128 lowercase pinyin letters or apostrophes')
@@ -174,7 +228,7 @@ def probe(engine: Path, input_text: str, state: str, select: str | None = None) 
     learning = run / 'learning'
     for p in (logs, home, temp, learning):
         p.mkdir(parents=True, exist_ok=True, mode=0o700)
-    rows = json.loads((engine / 'imeData.bundle/index.json').read_text())
+    rows = dictionary_rows(engine / 'imeData.bundle')
     rows = sorted((r for r in rows if not r.get('is_cell')), key=lambda r: r['type'] != 262144)
     table = run / 'dicts.tsv'
     table.write_text(''.join(f"{engine / 'imeData.bundle' / r['name']}\t{r['type']}\t{r['version']}\n" for r in rows))
@@ -193,6 +247,8 @@ def probe(engine: Path, input_text: str, state: str, select: str | None = None) 
                WETYPE_CRASH_LOG=str(crash_log))
     if select:
         env['WETYPE_SELECT'] = select
+    if emoji:
+        env['WETYPE_EMOJI'] = '1'
     command = ['/usr/bin/sandbox-exec', '-D', f'WORK={run}', '-D', f'SOURCE={manifest["source_app"]}',
                '-f', str(ROOT / 'native/offline.sb'), str(binary),
                str(engine / 'engine.bundle'), str(learning), str(table), input_text]
@@ -221,6 +277,8 @@ def probe(engine: Path, input_text: str, state: str, select: str | None = None) 
             candidates.append(match[2])
         if line.startswith('selected: '):
             selected = line.removeprefix('selected: ')
-    return {'engine_version': manifest['engine_version'], 'input': input_text,
+    version = next((line.removeprefix('engine version: ') for line in text.splitlines()
+                    if line.startswith('engine version: ')), manifest['engine_version'])
+    return {'engine_version': version, 'input': input_text,
             'candidates': candidates, 'batches': batches, 'selected': selected,
             'engine_log': str(engine_log), 'crash_log': str(crash_log), 'learning': str(learning)}

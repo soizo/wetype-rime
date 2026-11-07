@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+- Enable opt-in native WeType Unicode Emoji recommendations through the session's local engine settings, preserving candidate ranking and selection feedback.
+- Replace the mainland Xiaohe scheme's OpenCC Emoji mapping with native recommendations; add a reusable YAML option patch and probe --emoji.
+
+- Add the opt-in WeType小鹤大陆 scheme, reusing the native Xiaohe engine with the user's mainland OpenCC conversion resources and Shift-key punctuation preferences.
+
+- Keep all 12 editable scheme YAML files in rime/ and generate interface paths separately in wetype.runtime.yaml.
+- Add sync-config for configuration-only updates with backups, plus optional phrase, exact-input replacement and traditional-output examples.
+
+- Discover macOS engine executable and dictionary locations from local metadata, without a version/hash allowlist.
+- Preserve all bundled frameworks and resources; validate nested dictionary paths, loader fields and optional vendor checksums.
+- Add inspect-macos, actual source metadata and format-2 integrity manifests while retaining format-1 verification.
+- Refuse to silently reuse a different engine/resource copy in an existing runtime.
+
+
 ## 0.1.0 — 2026-11-07
 
 Initial macOS source release.

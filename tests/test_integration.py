@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 import subprocess
-from wetype.integration import register_scheme, disable
+from wetype.integration import register_scheme, disable, sync_configs
 from wetype.modes import SCHEMAS, SAVE_OPTIONS_PATCH
 
 
@@ -13,6 +13,40 @@ class IsolatedBackups(unittest.TestCase):
         self.addCleanup(temporary.cleanup)
         root=patch('wetype.integration.ROOT',Path(temporary.name))
         root.start();self.addCleanup(root.stop)
+
+
+class ConfigSyncTests(IsolatedBackups):
+    def test_copies_editable_files_and_preserves_runtime_and_personal_patches(self):
+        from wetype.integration import ROOT
+        source = ROOT / 'rime'
+        source.mkdir()
+        for schema in SCHEMAS:
+            (source / (schema + '.schema.yaml')).write_text('menu:\n  page_size: 6\n')
+        (source / 'my.dict.yaml').write_text('name: my\nversion: "1"\n')
+        (source / 'my.txt').write_text('短语\tcode\t100\n')
+        (source / 'lua').mkdir()
+        (source / 'lua/custom.lua').write_text('return {}\n')
+        target = ROOT / 'installed'
+        target.mkdir()
+        (target / 'wetype.schema.yaml').write_text('old configuration\n')
+        (target / 'wetype.runtime.yaml').write_text('private runtime paths\n')
+        (target / 'wetype.custom.yaml').write_text('personal patch\n')
+        backup = sync_configs(target)
+        self.assertEqual((backup / 'wetype.schema.yaml').read_text(), 'old configuration\n')
+        self.assertEqual((target / 'wetype.runtime.yaml').read_text(), 'private runtime paths\n')
+        self.assertEqual((target / 'wetype.custom.yaml').read_text(), 'personal patch\n')
+        for path in source.rglob('*'):
+            if path.is_file():
+                self.assertEqual((target / path.relative_to(source)).read_bytes(), path.read_bytes())
+        self.assertIsNone(sync_configs(target))
+
+    def test_missing_schema_does_not_partially_update_destination(self):
+        from wetype.integration import ROOT
+        (ROOT / 'rime').mkdir()
+        target = ROOT / 'installed'
+        with self.assertRaisesRegex(ValueError, 'missing scheme'):
+            sync_configs(target)
+        self.assertFalse(target.exists())
 
 
 class RegisterSchemeTests(IsolatedBackups):

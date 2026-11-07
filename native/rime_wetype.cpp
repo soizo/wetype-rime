@@ -86,14 +86,21 @@ class Translator:public rime::Translator {
     uint64_t session=0;
     rime::connection selected,updated,option_changed;
     bool active=false;
+    bool emoji_enabled=false;
     string launcher,mode_id;
     string before_text;
     string logged_context_source;
     bool context_sampled=false;
     std::shared_ptr<int> lifetime=std::make_shared<int>(0);
+    bool requested_emoji() const {
+        string option;
+        return engine_->schema()->config()->GetString("wetype/emoji_option",&option)
+            &&!option.empty()&&engine_->context()->get_option(option);
+    }
     void choose_mode(){
         const auto &mode=selected_mode(engine_);
-        if(mode_id==mode.id)return;
+        bool emoji=requested_emoji();
+        if(mode_id==mode.id&&emoji_enabled==emoji)return;
         string path;
         auto config=engine_->schema()->config();
         if(!config->GetString(string("wetype/launchers/")+mode.group,&path))
@@ -103,10 +110,11 @@ class Translator:public rime::Translator {
         session=0;active=false;before_text.clear();context_sampled=false;
         if(path!=launcher){host.reset();preparing={};launcher=path;}
         mode_id=mode.id;
+        emoji_enabled=emoji;
         if(!preparing.valid())preparing=prepare(launcher);
         engine_->context()->set_property("_wetype_mode",mode_id);
     }
-    void ensure(){choose_mode();if(!host)host=preparing.get();if(!session)session=host->open(mode_id);}
+    void ensure(){choose_mode();if(!host)host=preparing.get();if(!session)session=host->open(mode_id,emoji_enabled);}
     void error(const std::exception &e){
         string path;if(engine_->schema()->config()->GetString("wetype/log_file",&path))
             if(FILE *f=fopen(path.c_str(),"a")){fprintf(f,"[wetype] %s\n",e.what());fclose(f);}
@@ -169,6 +177,11 @@ public:
             }
         });
         option_changed=ctx->option_update_notifier().connect([this](rime::Context *c,const string &name){
+            string emoji_option;
+            if(engine_->schema()->config()->GetString("wetype/emoji_option",&emoji_option)&&name==emoji_option){
+                try{choose_mode();c->Clear();}catch(const std::exception &e){error(e);}
+                return;
+            }
             if(name=="wetype_surrounding"){
                 before_text.clear();context_sampled=false;
                 if(active)c->Clear();

@@ -1,9 +1,10 @@
 from __future__ import annotations
+import json
 import argparse
 from pathlib import Path
 import sys
 import subprocess
-from .macos import DEFAULT_ENGINE, prepare, probe, verify
+from .macos import DEFAULT_ENGINE, prepare, probe, verify, discover
 
 
 def main() -> int:
@@ -11,9 +12,13 @@ def main() -> int:
     from . import __version__
     parser.add_argument('--version', action='version', version='wetype-rime ' + __version__)
     commands = parser.add_subparsers(dest='command', required=True)
-    p = commands.add_parser('prepare-macos', help='copy the supported local Mac engine and dictionaries')
+    p = commands.add_parser('prepare-macos', help='discover and copy a local Mac engine and dictionaries')
     p.add_argument('app', type=Path)
     p.add_argument('--output', type=Path, default=DEFAULT_ENGINE)
+    p.add_argument('--resources', type=Path, help='dictionary directory containing index.json')
+    p = commands.add_parser('inspect-macos', help='inspect versions and discover dictionaries without loading code')
+    p.add_argument('app', type=Path)
+    p.add_argument('--resources', type=Path)
     p = commands.add_parser('verify', help='verify independent engine files against their local manifest')
     p.add_argument('engine', type=Path, nargs='?', default=DEFAULT_ENGINE)
     p = commands.add_parser('probe', help='run the native candidate tester with networking denied')
@@ -21,7 +26,10 @@ def main() -> int:
     p.add_argument('--engine', type=Path, default=DEFAULT_ENGINE)
     p.add_argument('--state', default='smoke', help='independent local learning state name')
     p.add_argument('--select', help='select matching candidate text and feed it back to the engine')
+    p.add_argument('--emoji', action='store_true', help='enable native local Unicode Emoji recommendations')
     from .integration import DEFAULT_RIME, DEFAULT_RUNTIME, DEFAULT_SOURCE
+    p = commands.add_parser('sync-config', help='copy project rime/ configuration without rebuilding or copying the engine')
+    p.add_argument('--rime-dir', type=Path, default=DEFAULT_RIME)
     p = commands.add_parser('install-rime', help='install the official native Rime component and isolated engine host')
     p.add_argument('--rime-dir', type=Path, default=DEFAULT_RIME)
     p.add_argument('--runtime', type=Path, default=DEFAULT_RUNTIME)
@@ -42,6 +50,12 @@ def main() -> int:
             print(f'独立引擎与学习数据：{args.runtime}')
             if backup:
                 print(f'原配置备份：{backup}')
+        elif args.command == 'sync-config':
+            from .integration import sync_configs
+            backup = sync_configs(args.rime_dir)
+            print('已同步 WeTypeRime 配置，请在鼠须管菜单中重新部署。')
+            if backup:
+                print(f'原配置备份：{backup}')
         elif args.command == 'disable-rime':
             from .integration import disable
             backup = disable(args.rime_dir, args.runtime)
@@ -49,12 +63,14 @@ def main() -> int:
             if backup:
                 print(f'停用前配置备份：{backup}')
         elif args.command == 'prepare-macos':
-            print(prepare(args.app, args.output))
+            print(prepare(args.app, args.output, args.resources))
+        elif args.command == 'inspect-macos':
+            print(json.dumps(discover(args.app, args.resources), ensure_ascii=False, indent=2))
         elif args.command == 'verify':
             manifest = verify(args.engine)
             print(f'OK: {manifest["app_version"]} ({manifest["build"]}), {len(manifest["files"])} files/links')
         else:
-            r = probe(args.engine, args.input, args.state, args.select)
+            r = probe(args.engine, args.input, args.state, args.select, args.emoji)
             print(f'引擎：{r["engine_version"]}')
             for n, text in enumerate(r['candidates'], 1):
                 print(f'{n}. {text}')
