@@ -1,0 +1,13 @@
+[
+  {"id":"quanpin","label":"全拼","keyboard":0,"double_pin":0,"group":"pinyin","semicolon":false},
+  {"id":"flypy","label":"小鹤双拼","keyboard":0,"double_pin":3,"group":"pinyin","semicolon":false},
+  {"id":"natural","label":"自然码双拼","keyboard":0,"double_pin":5,"group":"pinyin","semicolon":false},
+  {"id":"microsoft","label":"微软双拼","keyboard":0,"double_pin":2,"group":"pinyin","semicolon":true},
+  {"id":"sogou","label":"搜狗双拼","keyboard":0,"double_pin":1,"group":"pinyin","semicolon":true},
+  {"id":"ziguang","label":"紫光双拼","keyboard":0,"double_pin":6,"group":"pinyin","semicolon":true},
+  {"id":"abc","label":"智能 ABC 双拼","keyboard":0,"double_pin":7,"group":"pinyin","semicolon":false},
+  {"id":"jiajia","label":"拼音加加双拼","keyboard":0,"double_pin":4,"group":"pinyin","semicolon":false},
+  {"id":"wubi86","label":"86 五笔","keyboard":5,"double_pin":0,"group":"wubi86","semicolon":false},
+  {"id":"wubi98","label":"98 五笔","keyboard":5,"double_pin":0,"group":"wubi98","semicolon":false},
+  {"id":"wubi_new","label":"新世纪五笔","keyboard":5,"double_pin":0,"group":"wubi_new","semicolon":false}
+]

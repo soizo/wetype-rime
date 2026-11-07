@@ -1,0 +1,10 @@
+(version 1)
+(allow default)
+(deny network*)
+; A successful probe must use its independent copy, never the installed app.
+(deny file-read* file-write* (subpath "/Library/Input Methods/WeType.app"))
+(deny file-read* file-write* (subpath (param "SOURCE")))
+; Limit any engine or library writes to the disposable test directory.
+(deny file-write*)
+(allow file-write* (subpath (param "WORK")))
+(allow file-write-data (literal "/dev/null"))

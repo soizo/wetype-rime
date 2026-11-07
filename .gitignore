@@ -1,0 +1,29 @@
+# Proprietary engines, models, APKs and personal learning data stay local.
+.local/
+work/
+build/
+__pycache__/
+*.py[cod]
+.DS_Store
+*.apk
+*.bin
+*.so
+*.dylib
+*.bundle/
+*.app/
+
+# Diagnostics and future Rime personal dictionaries.
+*.log
+*.userdb/
+*.userdb.txt
+
+# Local collaboration and editor context is not part of the distribution.
+AGENTS.md
+CLAUDE.md
+CONTEXT.md
+HANDOFF.md
+MEMORY.md
+SKILL.md
+.agents/
+.codex/
+.claude/
