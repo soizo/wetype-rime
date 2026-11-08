@@ -59,6 +59,10 @@ The real-librime test creates an isolated profile. `--user-profile /path/to/Rime
 
 ## Integration boundaries
 
+Rime-side fuzzy spelling is implemented in `native/rime_fuzzy.h` using librime `Script` and `Projection`, not engine fuzzy flags or an additional word dictionary. `speller/algebra` runs on canonical syllables; Xiaohe projection follows it. Plain derive aliases are classified before the layout changes the spelling codes. Bounded complete-syllable paths produce up to three normalized full-pinyin queries in separate sessions; only full-coverage rows are exposed, with coverage remapped to the untouched user input. Candidate feedback uses the branch's native session/ticket/index; ordinary partial selection remains on the original path. Invalid configuration falls back to native candidates and sets `_wetype_fuzzy_error`.
+
+Run `python3 tests/smoke_fuzzy.py --rime-source /path/to/librime` for deterministic Rime algebra, Xiaohe mapping, rule edits, invalid-rule rejection and bounds. Run `python3 tests/smoke_config.py --feature fuzzy` and `--feature fuzzy-flypy` for actual Rime/native selection and toggles. Mainland acceptance also checks filtered traditional fuzzy selection. Existing default-scheme acceptance continues to exercise the native path without fuzzy rules.
+
 `sync_configs` copies project YAML/TXT and Lua files independently of engine staging. Conflicting destination files are backed up; destination-only personal files are left alone. `stage` generates only `wetype.runtime.yaml` for machine-specific interface paths. Every scheme includes `wetype.runtime:/wetype` and declares its own mode. `modes.json` remains the engine ABI catalog; adding a new input mode requires updating both that catalog and its scheme, while ordinary configuration edits need only synchronization and Rime deployment.
 
 The adapter uses Rime's official C++ component and module interfaces. Lua only loads the native module. Candidates retain their session, revision ticket and engine selection identifier so selection feedback cannot be sent to an unrelated query.

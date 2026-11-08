@@ -19,6 +19,7 @@
 #include <functional>
 #include "engine_client.h"
 #include "surrounding_text.h"
+#include "rime_fuzzy.h"
 namespace wetype {
 static const InputMode &selected_mode(rime::Engine *engine){
     string fixed;engine->schema()->config()->GetString("wetype/mode",&fixed);
@@ -87,6 +88,9 @@ class Translator:public rime::Translator {
     rime::connection selected,updated,option_changed;
     bool active=false;
     bool emoji_enabled=false;
+    bool fuzzy_enabled=false;
+    RimeFuzzy fuzzy;
+    std::vector<uint64_t> fuzzy_sessions;
     string launcher,mode_id;
     string before_text;
     string logged_context_source;
@@ -97,20 +101,35 @@ class Translator:public rime::Translator {
         return engine_->schema()->config()->GetString("wetype/emoji_option",&option)
             &&!option.empty()&&engine_->context()->get_option(option);
     }
+    bool requested_fuzzy() const {
+        string option;
+        return engine_->schema()->config()->GetString("wetype/fuzzy_option",&option)
+            &&!option.empty()&&engine_->context()->get_option(option);
+    }
     void choose_mode(){
         const auto &mode=selected_mode(engine_);
         bool emoji=requested_emoji();
-        if(mode_id==mode.id&&emoji_enabled==emoji)return;
+        bool use_fuzzy=requested_fuzzy();
+        if(mode_id==mode.id&&emoji_enabled==emoji&&fuzzy_enabled==use_fuzzy)return;
         string path;
         auto config=engine_->schema()->config();
         if(!config->GetString(string("wetype/launchers/")+mode.group,&path))
             config->GetString("wetype/launcher",&path);
         if(path.empty())throw std::runtime_error("wetype launcher not configured");
         if(host&&session)host->command("CLOSE "+std::to_string(session));
+        if(host)for(auto id:fuzzy_sessions)host->command("CLOSE "+std::to_string(id));
+        fuzzy_sessions.clear();
         session=0;active=false;before_text.clear();context_sampled=false;
         if(path!=launcher){host.reset();preparing={};launcher=path;}
         mode_id=mode.id;
         emoji_enabled=emoji;
+        fuzzy_enabled=use_fuzzy;
+        try{
+            if(fuzzy_enabled)fuzzy.load(config,mode_id);
+            engine_->context()->set_property("_wetype_fuzzy_error","");
+        }catch(const std::exception &e){
+            engine_->context()->set_property("_wetype_fuzzy_error",e.what());
+        }
         if(!preparing.valid())preparing=prepare(launcher);
         engine_->context()->set_property("_wetype_mode",mode_id);
     }
@@ -141,7 +160,35 @@ class Translator:public rime::Translator {
                 context_sampled=true;
             }
             auto result=host->query(session,input,before_text);active=true;
-            for(const auto &row:result.rows)out->Append(std::make_shared<WetypeCandidate>(start,row,result.ticket,session,mode_id));
+            auto variants=fuzzy_enabled&&ctx->get_property("_wetype_fuzzy_error").empty()?fuzzy.variants(input):std::vector<string>{};
+            std::set<std::pair<string,size_t>> seen;
+            auto append=[&](const Row &row,uint64_t ticket,uint64_t id,bool is_fuzzy){
+                if(!variants.empty()&&!seen.insert({row.text,row.cover}).second)return;
+                auto candidate=std::make_shared<WetypeCandidate>(start,row,ticket,id,mode_id);
+                if(is_fuzzy){candidate->set_type("wetype_fuzzy");candidate->set_comment("模糊");}
+                out->Append(candidate);
+            };
+            // Keep the first three exact candidates, then bounded fuzzy choices.
+            // Each branch owns a separate native session and selection ticket.
+            size_t head=variants.empty()?result.rows.size():std::min<size_t>(3,result.rows.size());
+            for(size_t i=0;i<head;++i)append(result.rows[i],result.ticket,session,false);
+            ctx->set_property("_wetype_fuzzy_variants",std::to_string(variants.size()));
+            for(size_t i=0;i<variants.size();++i){
+                try{
+                    if(i>=fuzzy_sessions.size())fuzzy_sessions.push_back(host->open("quanpin",emoji_enabled));
+                    auto alternative=host->query(fuzzy_sessions[i],variants[i],before_text);
+                    size_t count=0;
+                    for(auto row:alternative.rows){
+                        // Only complete branch matches are exposed. Partial
+                        // selection continues through the untouched native path.
+                        if(row.cover!=variants[i].size())continue;
+                        row.cover=input.size();row.preedit=input;
+                        append(row,alternative.ticket,fuzzy_sessions[i],true);
+                        if(++count==3)break;
+                    }
+                }catch(const std::exception &e){ctx->set_property("_wetype_fuzzy_error",e.what());}
+            }
+            for(size_t i=head;i<result.rows.size();++i)append(result.rows[i],result.ticket,session,false);
             engine_->context()->set_property("_wetype_error","");
         }catch(const std::exception &e){
             error(e);out->Append(std::make_shared<rime::SimpleCandidate>("wetype_error",start,end,input,"引擎暂不可用，回车保留原文"));
@@ -166,17 +213,26 @@ public:
         selected=ctx->select_notifier().connect(-100,[this](rime::Context *c){
             auto candidate=rime::Candidate::GetGenuineCandidate(c->GetSelectedCandidate());
             auto own=std::dynamic_pointer_cast<WetypeCandidate>(candidate);
-            if(!own||!host||own->session!=session||own->mode!=mode_id)return;
-            try{host->command("SELECT "+std::to_string(session)+" "+std::to_string(own->ticket)+" "+std::to_string(own->index));}
+            if(!own||!host||own->mode!=mode_id)return;
+            if(own->session!=session&&std::find(fuzzy_sessions.begin(),fuzzy_sessions.end(),own->session)==fuzzy_sessions.end())return;
+            try{host->command("SELECT "+std::to_string(own->session)+" "+std::to_string(own->ticket)+" "+std::to_string(own->index));}
             catch(const std::exception &e){error(e);}
         });
         updated=ctx->update_notifier().connect(-100,[this](rime::Context *c){
             if(c->input().empty()){
                 before_text.clear();context_sampled=false;c->set_property("_wetype_context_bytes","0");
-                if(active&&host){active=false;try{host->command("RESET "+std::to_string(session));}catch(const std::exception &e){error(e);}}
+                if(active&&host){active=false;try{
+                    host->command("RESET "+std::to_string(session));
+                    for(auto id:fuzzy_sessions)host->command("RESET "+std::to_string(id));
+                }catch(const std::exception &e){error(e);}}
             }
         });
         option_changed=ctx->option_update_notifier().connect([this](rime::Context *c,const string &name){
+            string fuzzy_option;
+            if(engine_->schema()->config()->GetString("wetype/fuzzy_option",&fuzzy_option)&&name==fuzzy_option){
+                try{choose_mode();c->Clear();}catch(const std::exception &e){error(e);}
+                return;
+            }
             string emoji_option;
             if(engine_->schema()->config()->GetString("wetype/emoji_option",&emoji_option)&&name==emoji_option){
                 try{choose_mode();c->Clear();}catch(const std::exception &e){error(e);}
@@ -191,7 +247,10 @@ public:
             try{string previous=mode_id;choose_mode();if(previous!=mode_id)c->Clear();}catch(const std::exception &e){error(e);}
         });
     }
-    ~Translator(){lifetime.reset();selected.disconnect();updated.disconnect();option_changed.disconnect();if(host&&session)try{host->command("CLOSE "+std::to_string(session));}catch(...){} }
+    ~Translator(){lifetime.reset();selected.disconnect();updated.disconnect();option_changed.disconnect();if(host)try{
+        if(session)host->command("CLOSE "+std::to_string(session));
+        for(auto id:fuzzy_sessions)host->command("CLOSE "+std::to_string(id));
+    }catch(...){} }
     rime::an<rime::Translation> Query(const string &input,const rime::Segment &segment) override {
         if(!segment.HasTag("abc")||input.empty())return nullptr;
         std::weak_ptr<int> alive=lifetime;

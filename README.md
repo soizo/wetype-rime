@@ -126,6 +126,8 @@ The engine, binary dictionaries and adapter live in the independent runtime. Mac
 
 The optional [`WeType小鹤大陆` variant](rime/wetype_flypy_gov.schema.yaml) inherits the basic Xiaohe scheme and adds mainland traditional glyph conversion, native WeType Emoji recommendations and personal Shift-key punctuation behavior. Its script conversion uses existing OpenCC resources from the user's Rime installation; Emoji candidates come directly from WeType's local engine and binary dictionaries, with native ranking and selection feedback. See [configuration notes](rime/README.md) for dependencies, menu registration and the opt-in Emoji patch for other schemes. The original 12 basic schemes keep their defaults.
 
+Optional fuzzy spelling uses Rime's own `speller/algebra` through the adapter, with editable rules in [`rime/wetype_fuzzy.yaml`](rime/wetype_fuzzy.yaml); WeType's fuzzy options stay disabled. Full pinyin and Xiaohe are supported, with `in / ing` as the initial rules. The mainland Xiaohe variant enables this by default and exposes an on/off switch. Other base schemes can opt in using the [fuzzy example](examples/rime-extensions/fuzzy/wetype.custom.yaml). See the [configuration guide](rime/README.md#rime-模糊音) for input and candidate limits.
+
 ## Input Modes
 
 The unified **WeTypeRime** scheme offers all 11 input modes through Rime's option menu. Each mode also has its own standalone scheme, displayed with a `WeTypeRime 拼音`-style name. The internal schema IDs remain `wetype` and `wetype_*` so existing configurations keep working.

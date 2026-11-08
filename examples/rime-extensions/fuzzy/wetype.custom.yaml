@@ -1,0 +1,11 @@
+# 全拼和小鹤双拼可用；其他双拼布局与五笔不启用模糊分支。
+patch:
+  wetype/fuzzy_option: wetype_fuzzy
+  wetype_fuzzy:
+    __include: wetype_fuzzy:/settings
+  speller/algebra:
+    __include: wetype_fuzzy:/algebra
+  "switches/@next":
+    name: wetype_fuzzy
+    reset: 1
+    states: [精准音, 模糊音]

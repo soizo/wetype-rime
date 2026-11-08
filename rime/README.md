@@ -32,3 +32,21 @@ python3 -m wetype sync-config
 示例在 [`examples/rime-extensions/`](../examples/rime-extensions/README.md)，包含自定义短语、精确输入替换和繁简转换。它们是独立的启用示例，默认不安装、不启用。可自由增加 Rime 原生 translator、filter 和 recognizer；不要移除原生接口所需的 `wetype_speller`、`wetype_translator` 和 Lua 加载器。
 
 `native-emoji` 示例通过 `wetype/emoji_option: emoji` 绑定 Rime 的 `emoji` 开关。候选由 WeType 的本地二进制词库直接生成，不使用 `emoji.json` 映射；关闭开关后会重建会话并清空正在输入的组合，防止旧候选被选中。基础方案默认不绑定此开关；大陆定制方案默认开启。此能力需要更新后的接口与 worker，首次升级需运行 `install-rime`，后续开关和方案配置修改才只需 `sync-config`。
+
+## Rime 模糊音
+
+`wetype_fuzzy.yaml` 集中保存模糊音规则、通用拼音音节名和小鹤键位运算。默认规则只有 `in / ing` 双向模糊；n/l、平翘舌等规则留有注释，按需开启。这里的音节表不包含字词，不替换 WeType 的 bin 词库。
+
+规则使用 Rime 原生 `speller/algebra` 语法，例如：
+
+```yaml
+algebra:
+  - derive/in$/ing/
+  - derive/ing$/in/
+```
+
+WeType小鹤大陆默认开启，方案菜单可切换“精准音 / 模糊音”。全拼或独立小鹤方案可使用 `examples/rime-extensions/fuzzy/` 中的补丁。基础 12 方案默认不启用；其他双拼布局和五笔暂不生成模糊候选。
+
+适配器使用 librime 的拼写运算派生拼音，再由 WeType 提供候选，不启用 WeType 的模糊音字段。小鹤先做拼音模糊派生，再映射到双拼编码，所以输入 `qb`（qin）也可出现 `qing` 的“请”等候选，注释为“模糊”。原输入前三个候选保留，模糊候选随后插入并去重；选词反馈仍送回对应的原生引擎会话。
+
+当前只对完整音节组成、32 字符以内的小写输入补充候选，每条路径最多两个模糊音节、最多三个扩展拼写。模糊分支只提供覆盖整个输入的候选；原路径仍支持部分选词。含大写的输入、无法被音节表完整识别的输入、长输入及不支持的布局继续使用原生路径。切换开关会清空正在输入的组合。首次升级需安装新的接口，之后修改规则只需同步配置并重新部署。

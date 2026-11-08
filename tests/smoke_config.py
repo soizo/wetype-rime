@@ -46,7 +46,7 @@ class Context(C.Structure):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--feature', choices=('all', 'phrases', 'force', 'traditional', 'mainland', 'native-emoji'), default='all')
+    parser.add_argument('--feature', choices=('all', 'phrases', 'force', 'traditional', 'mainland', 'native-emoji', 'fuzzy', 'fuzzy-flypy'), default='all')
     args = parser.parse_args()
     base = Path(tempfile.mkdtemp(prefix='config-extensions-', dir=ROOT / '.local'))
     user, logs = base / 'user', base / 'logs'
@@ -55,7 +55,7 @@ def main():
     examples = ROOT / 'examples/rime-extensions'
     patches = []
     features = (('phrases', 'force', 'traditional') if args.feature == 'all'
-                else (() if args.feature in ('mainland', 'native-emoji') else (args.feature,)))
+                else (() if args.feature in ('mainland', 'native-emoji', 'fuzzy', 'fuzzy-flypy') else (args.feature,)))
     for feature in features:
         text = (examples / feature / 'wetype.custom.yaml').read_text()
         patches.append(text.split('patch:\n', 1)[1])
@@ -65,7 +65,10 @@ def main():
         (user / 'wetype.custom.yaml').write_text('patch:\n  wetype/emoji_option: emoji\n  "switches/@next":\n    name: emoji\n    reset: 1\n    states: [关, 开]\n')
     shutil.copy2(examples / 'phrases/wetype_phrases.txt', user / 'wetype_phrases.txt')
     shutil.copy2(examples / 'force/wetype_force.lua', user / 'lua/wetype_force.lua')
-    schema = 'wetype_flypy_gov' if args.feature == 'mainland' else 'wetype'
+    schema = ('wetype_flypy_gov' if args.feature == 'mainland'
+              else ('wetype_flypy' if args.feature == 'fuzzy-flypy' else 'wetype'))
+    if args.feature in ('fuzzy', 'fuzzy-flypy'):
+        shutil.copy2(examples / 'fuzzy/wetype.custom.yaml', user / (schema + '.custom.yaml'))
     if args.feature == 'mainland':
         from wetype.integration import DEFAULT_RIME
         shutil.copytree(DEFAULT_RIME / 'opencc', user / 'opencc')
@@ -93,6 +96,11 @@ def main():
     context = api('_Z14RimeGetContextmP14rime_context_t', C.c_int, C.c_size_t, C.POINTER(Context))
     free_context = api('_Z15RimeFreeContextP14rime_context_t', C.c_int, C.POINTER(Context))
     clear = api('_Z20RimeClearCompositionm', None, C.c_size_t)
+    get_property = api('_Z15RimeGetPropertymPKcPcm', C.c_int, C.c_size_t, C.c_char_p, C.c_void_p, C.c_size_t)
+    def property_value(session, name):
+        buffer = C.create_string_buffer(4096)
+        get_property(session, name, buffer, len(buffer))
+        return buffer.value
     destroy = api('_Z18RimeDestroySessionm', C.c_int, C.c_size_t)
     finalize = api('_Z12RimeFinalizev', None)
     modules = (C.c_char_p * 3)(b'default', b'lua', None)
@@ -125,7 +133,7 @@ def main():
             expect('myphrase', '我的自定义短语')
         if 'force' in features:
             expect('myname', '自定义姓名')
-        code = 'vsgo' if args.feature == 'mainland' else 'zhongguo'
+        code = 'vsgo' if schema.startswith('wetype_flypy') else 'zhongguo'
         expect(code, '中国')
         if args.feature == 'mainland':
             expect('nihc', '你好')
@@ -179,6 +187,60 @@ def main():
             assert '😄' in rows[:3], rows
             clear(session)
             print('PASS: native emoji ranking, numeric selection, feedback, on/off/on and composition invalidation', flush=True)
+        if args.feature in ('fuzzy', 'fuzzy-flypy', 'mainland'):
+            fuzzy_code = 'qb' if schema.startswith('wetype_flypy') else 'qin'
+            def fuzzy_menu():
+                for letter in fuzzy_code:
+                    assert key(session, ord(letter), 0)
+                value = Context(); value.data_size = C.sizeof(value) - C.sizeof(C.c_int)
+                assert context(session, C.byref(value))
+                try:
+                    assert value.composition.length == len(fuzzy_code)
+                    return [(value.menu.candidates[i].text.decode(),
+                             (value.menu.candidates[i].comment or b'').decode())
+                            for i in range(value.menu.num_candidates)]
+                finally:
+                    free_context(C.byref(value))
+            option(session, b'wetype_fuzzy', 0)
+            rows = fuzzy_menu()
+            assert not any(comment == '模糊' for _, comment in rows), rows
+            clear(session)
+            option(session, b'wetype_fuzzy', 1)
+            rows = fuzzy_menu()
+            print('Fuzzy menu:', rows, flush=True)
+            fuzzy_indices = [i for i, (_, comment) in enumerate(rows) if comment == '模糊']
+            assert fuzzy_indices, rows
+            index = fuzzy_indices[0]
+            assert index < 9
+            assert key(session, ord('1') + index, 0)
+            value = Commit(); value.data_size = C.sizeof(value) - C.sizeof(C.c_int)
+            assert commit(session, C.byref(value))
+            try:
+                assert value.text.decode() == rows[index][0], (value.text, rows)
+            finally:
+                free(C.byref(value))
+            assert not property_value(session, b'_wetype_error'), 'native fuzzy selection feedback failed'
+            expect(code, '中国')
+            if args.feature == 'mainland':
+                option(session, b'traditionalization', 1)
+                rows = fuzzy_menu()
+                index = next(i for i, (text, comment) in enumerate(rows) if text == '請' and comment == '模糊')
+                assert key(session, ord('1') + index, 0)
+                value = Commit(); value.data_size = C.sizeof(value) - C.sizeof(C.c_int)
+                assert commit(session, C.byref(value))
+                try:
+                    assert value.text.decode() == '請'
+                finally:
+                    free(C.byref(value))
+                option(session, b'traditionalization', 0)
+            assert not property_value(session, b'_wetype_error'), 'native selection feedback failed'
+            assert not property_value(session, b'_wetype_fuzzy_error'), 'Rime fuzzy branch failed'
+            fuzzy_menu()
+            option(session, b'wetype_fuzzy', 0)
+            rows = fuzzy_menu()
+            assert not any(comment == '模糊' for _, comment in rows), rows
+            clear(session)
+            print('PASS: Rime fuzzy spelling, original input coverage, native branch selection and live toggle', flush=True)
         if 'traditional' in features:
             option(session, b'wetype_traditional', 1)
             expect('zhongguo', '中國')

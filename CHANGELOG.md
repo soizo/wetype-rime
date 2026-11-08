@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Add opt-in Rime spelling-algebra fuzzy matching for full pinyin and Xiaohe without enabling engine fuzzy options or adding a word dictionary. Keep rules in wetype_fuzzy.yaml, initially in/ing, and enable the switch in the mainland Xiaohe variant.
+
 - Enable opt-in native WeType Unicode Emoji recommendations through the session's local engine settings, preserving candidate ranking and selection feedback.
 - Replace the mainland Xiaohe scheme's OpenCC Emoji mapping with native recommendations; add a reusable YAML option patch and probe --emoji.
 
