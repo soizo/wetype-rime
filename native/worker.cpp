@@ -27,6 +27,7 @@
 #include "text_context_abi.h"
 #include "session_options.h"
 #include "user_words_abi.h"
+#include "cell_dicts.h"
 #include <wetype_modes.h>
 using namespace std::chrono_literals;
 using std::string;
@@ -103,6 +104,7 @@ struct Api {
                    const char *,uint32_t,const char *,uint32_t,void *,uint32_t,const char *const *);
     void (*finalize)();
 } api;
+static CellDictionaries cell_dicts;
 template<class T> static void symbol(void *image, T &out, const char *name) {
     out = reinterpret_cast<T>(dlsym(image,name));
     if (!out) throw std::runtime_error(string("missing engine symbol: ")+name);
@@ -407,6 +409,9 @@ static void start(const char *engine,const char *work,const char *table) {
 #endif
     symbol(image,api.next,"wxime_candidate_next");symbol(image,api.erase_iterator,"wxime_delete_candidate_iterator");
     symbol(image,api.select,"wxime_select_candidate");symbol(image,api.finalize,"wxime_finalize");
+    cell_dicts.initialise(getenv("WETYPE_CELL_DICTS"),
+        reinterpret_cast<CellDictionaries::Add>(dlsym(image,"wxime_add_cell_dict")),
+        reinterpret_cast<CellDictionaries::Clear>(dlsym(image,"wxime_clear_cell_dicts")));
     if(const char *path=getenv("WETYPE_CRASH_LOG")) {
         crash_fd=open(path,O_WRONLY|O_CREAT|O_APPEND,0600);
         if(crash_fd<0)throw std::runtime_error("cannot open crash.log");
@@ -460,6 +465,20 @@ int main(int argc,char **argv) {
             std::istringstream in(line);string cmd,arg;uint64_t ticket=0;size_t index=0;
             in>>cmd;
             if(cmd=="QUIT")break;
+            if(cmd=="CELL_STATUS"){
+                fprintf(protocol,"CELLS %zu\n",cell_dicts.available().size());
+                for(const auto &item:cell_dicts.available())fprintf(protocol,"D %s %u %d\n",hex(item.first).c_str(),item.second.type,
+                    std::find(cell_dicts.enabled().begin(),cell_dicts.enabled().end(),item.first)!=cell_dicts.enabled().end());
+                fprintf(protocol,"END\n");fflush(protocol);continue;
+            }
+            if(cmd=="CELL_SYNC"){
+                size_t count=0;string id,extra;std::vector<string> ids;
+                if(!(in>>count)||count>32)throw std::runtime_error("invalid native cell batch");
+                for(size_t i=0;i<count;++i){if(!(in>>id))throw std::runtime_error("incomplete native cell batch");ids.push_back(unhex(id));}
+                if(in>>extra)throw std::runtime_error("invalid native cell batch fields");
+                if(cell_dicts.sync(ids))for(auto &entry:sessions)if(!entry.second->closed)reset(*entry.second);
+                fprintf(protocol,"OK\n");fflush(protocol);continue;
+            }
             if(cmd=="LEXICON_SYNC"){
                 string extra;size_t count=0;
                 if(!(in>>count)||count>10000||in>>extra)throw std::runtime_error("invalid dictionary batch");

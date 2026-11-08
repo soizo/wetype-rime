@@ -112,8 +112,19 @@ def stage(rime_dir: Path, runtime: Path, engine: Path = DEFAULT_ENGINE, copy_eng
             shutil.copytree(engine, target, symlinks=True)
         engine = target
     atomic_copy(ROOT / 'native/offline.sb', runtime / 'offline.sb')
-    rows = dictionary_rows(engine / 'imeData.bundle')
-    rows = sorted((r for r in rows if not r.get('is_cell')), key=lambda r: r['type'] != 262144)
+    indexed = dictionary_rows(engine / 'imeData.bundle')
+    cells = []
+    for row in indexed:
+        if not row.get('is_cell'):
+            continue
+        identifier = row.get('uniqueID', row['name'])
+        if (not isinstance(identifier, str) or not re.fullmatch(r'[A-Za-z0-9_.-]{1,128}', identifier)
+                or identifier in {entry[0] for entry in cells} or len(cells) >= 32):
+            raise ValueError('invalid or duplicate native cell dictionary identifier')
+        cells.append((identifier, engine / 'imeData.bundle' / row['name'], row['type']))
+    cell_table = runtime / 'cell-dicts.tsv'
+    cell_table.write_text(''.join(f'{identifier}\t{path}\t{kind}\n' for identifier,path,kind in cells))
+    rows = sorted((r for r in indexed if not r.get('is_cell')), key=lambda r: r['type'] != 262144)
     state = runtime / 'state'
     q = shlex.quote
     launchers = {}
@@ -133,6 +144,7 @@ def stage(rime_dir: Path, runtime: Path, engine: Path = DEFAULT_ENGINE, copy_eng
         launcher += 'unset DYLD_INSERT_LIBRARIES DYLD_LIBRARY_PATH DYLD_FRAMEWORK_PATH DYLD_FALLBACK_LIBRARY_PATH DYLD_FALLBACK_FRAMEWORK_PATH\n'
         launcher += f'export HOME={q(str(state / "home"))}\nexport CFFIXED_USER_HOME="$HOME"\nexport TMPDIR={q(str(state / "tmp") + "/")}\n'
         launcher += f'export WETYPE_ENGINE_LOG={q(str(log))}\n'
+        launcher += f'export WETYPE_CELL_DICTS={q(str(cell_table))}\n'
         launcher += f'export WETYPE_CRASH_LOG={q(str(state / "logs"))}/crash{suffix}-$$.log\n'
         launcher += f'exec /usr/bin/sandbox-exec -D {q("WORK=" + str(state))} -D {q("SOURCE=" + manifest["source_app"])} '
         launcher += f'-f {q(str(runtime / "offline.sb"))} {q(str(runtime / "bin/wetype-worker"))} '

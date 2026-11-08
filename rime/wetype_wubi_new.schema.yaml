@@ -60,6 +60,8 @@ ascii_composer:
 wetype:
   __include: wetype.runtime:/wetype
   mode: wubi_new
+  # Native binary cell dictionaries; select identifiers in the scheme patch.
+  cell_dicts: []
 
 # Rime text-table configuration; candidates and learning use WeType.
 custom_phrase:

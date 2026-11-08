@@ -64,3 +64,14 @@ WeType handles matching, initial weight ranking and native learning. Existing
 personal `*.dict.yaml` files are never overwritten by configuration sync.
 See [optional dictionaries](../docs/dictionaries.md) for domain tables, weights,
 learning retention and limits.
+
+## Bundled native cell dictionaries
+
+The native binary packs are selected separately from Rime `*.dict.yaml` files.
+All base schemes set `wetype/cell_dicts: []`, so they remain disabled until a
+scheme's `.custom.yaml` selects the desired identifiers. The current engine
+supplies `cell_dict.sc`, `cell_dict.ssrc` and `cell_dict.hf`. Merge the
+[native cell example](../examples/rime-extensions/native-cell-dictionaries/wetype.custom.yaml)
+into the relevant patch and deploy; replace the list with `[]` to disable them.
+The native engine loads and ranks these resources locally. See the
+[cell dictionary guide](../docs/native-cell-dictionaries.md) for details.

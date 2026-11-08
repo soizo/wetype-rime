@@ -40,6 +40,7 @@ class Client {
     std::mutex mu;
     std::map<string,string> word_sources;
     std::shared_ptr<const string> active_lexicon;
+    std::shared_ptr<const string> active_cells;
     bool broken=false;
     [[noreturn]] void transport_error(const char *message){broken=true;throw std::runtime_error(message);}
     void write(const string &message) {
@@ -84,6 +85,13 @@ class Client {
             write(*request);if(reply(30000)!="OK")throw std::runtime_error("invalid dictionary acknowledgement");
         }
         active_lexicon=request;
+    }
+    void activate_cells(const std::shared_ptr<const string> &request){
+        if(!request||active_cells==request)return;
+        if(!active_cells||*active_cells!=*request){
+            write(*request);if(reply(30000)!="OK")throw std::runtime_error("invalid native cell acknowledgement");
+        }
+        active_cells=request;
     }
 public:
     explicit Client(const string &launcher) {
@@ -143,8 +151,17 @@ public:
         return std::make_shared<const string>(std::move(message));
     }
     void sync_lexicon(const std::shared_ptr<const string> &request){std::lock_guard<std::mutex> lock(mu);activate_lexicon(request);}
-    Result query(uint64_t id,const string &text,const string &before={},const std::shared_ptr<const string> &dictionary={}){
-        std::lock_guard<std::mutex> lock(mu);activate_lexicon(dictionary);write("QUERY "+std::to_string(id)+" "+hex(text)+" "+hex(before));
+    static std::shared_ptr<const string> cell_message(const std::vector<string> &ids){
+        if(ids.size()>32)throw std::runtime_error("too many native cell dictionaries");
+        string request="CELL_SYNC "+std::to_string(ids.size());
+        for(const auto &id:ids){if(id.empty()||id.size()>128)throw std::runtime_error("invalid native cell identifier");request+=' '+hex(id);}
+        return std::make_shared<const string>(std::move(request));
+    }
+    void sync_cells(const std::shared_ptr<const string> &request){std::lock_guard<std::mutex> lock(mu);activate_cells(request);}
+    Result query(uint64_t id,const string &text,const string &before={},const std::shared_ptr<const string> &dictionary={},
+                 const std::shared_ptr<const string> &cells={}){
+        std::lock_guard<std::mutex> lock(mu);activate_lexicon(dictionary);activate_cells(cells);
+        write("QUERY "+std::to_string(id)+" "+hex(text)+" "+hex(before));
         Result result{};size_t count=0;string tag;std::istringstream in(reply());in>>tag>>result.ticket>>count;
         if(tag!="RESULT"||count>64||!result.ticket)transport_error("invalid candidate response");
         // Consume one complete frame before validating its candidate fields.

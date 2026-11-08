@@ -46,3 +46,13 @@ Rime dictionary files, including the empty `custom.dict.yaml` starter.
 Set `translator/dictionary: null` and deploy to disable imports. This extension is
 disabled by default; [the dictionary guide](../../docs/dictionaries.md) explains
 entry formats, native weights and retained learning.
+
+## Bundled native cell dictionaries
+
+Merge `native-cell-dictionaries/wetype.custom.yaml` into the target scheme's
+`.custom.yaml`, then deploy. The example enables the three native packs supplied
+by the validated macOS engine. Keep only the identifiers you want, or set
+`wetype/cell_dicts: []` to disable them. This feature is disabled by default and
+uses WeType's original binary loading interface. It is independent of the
+ordinary Rime vocabulary example above. See the
+[native cell guide](../../docs/native-cell-dictionaries.md).

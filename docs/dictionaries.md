@@ -132,6 +132,7 @@ entry count. The private native import ABI is optional: a missing interface
 prevents dictionary import whilst ordinary typing continues. It has been tested
 with the macOS 3.0.1 (680) engine.
 
-This feature does not enable WeType's bundled binary cell dictionaries or
-network updates. Dictionary sources, the native import ledger and learning
+This ordinary vocabulary interface is separate from [bundled native cell
+dictionaries](native-cell-dictionaries.md), which use `wetype/cell_dicts`. Neither
+interface enables network updates. Dictionary sources, the native import ledger and learning
 remain local. Workers retain the network-denied policy.

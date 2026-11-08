@@ -1,0 +1,9 @@
+# Merge into <schema_id>.custom.yaml, then deploy.
+# Use wetype_flypy_gov.custom.yaml for the mainland Xiaohe scheme.
+# Keep only the identifiers you want to load from the local engine bundle.
+patch:
+  wetype/cell_dicts:
+    - cell_dict.sc
+    - cell_dict.ssrc
+    - cell_dict.hf
+# Disable all three with: wetype/cell_dicts: []

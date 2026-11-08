@@ -22,6 +22,7 @@
 #include "rime_fuzzy.h"
 #include "rime_user_words.h"
 #include "rime_lexicon.h"
+#include "cell_dicts.h"
 namespace wetype {
 static const InputMode &selected_mode(rime::Engine *engine){
     string fixed;engine->schema()->config()->GetString("wetype/mode",&fixed);
@@ -100,6 +101,10 @@ class Translator:public rime::Translator {
     bool lexicon_valid=false;
     std::shared_ptr<const string> dictionary_request;
     std::shared_future<void> lexicon_preparing;
+    bool cells_valid=false;
+    std::vector<string> cell_ids;
+    std::shared_ptr<const string> cells_request;
+    std::shared_future<void> cells_preparing;
     string launcher,mode_id;
     string before_text;
     string logged_context_source;
@@ -130,7 +135,7 @@ class Translator:public rime::Translator {
         fuzzy_sessions.clear();
         session=0;active=false;before_text.clear();context_sampled=false;
         bool changed_host=path!=launcher;
-        if(changed_host){host.reset();preparing={};words_preparing={};lexicon_preparing={};launcher=path;}
+        if(changed_host){host.reset();preparing={};words_preparing={};lexicon_preparing={};cells_preparing={};launcher=path;}
         mode_id=mode.id;
         emoji_enabled=emoji;
         fuzzy_enabled=use_fuzzy;
@@ -151,6 +156,11 @@ class Translator:public rime::Translator {
             auto request=dictionary_request;
             lexicon_preparing=std::async(std::launch::async,[pending,request]{pending.get()->sync_lexicon(request);}).share();
         }
+        if(cells_valid&&!cells_preparing.valid()){
+            auto pending=preparing;
+            cells_request=Client::cell_message(cell_ids);auto request=cells_request;
+            cells_preparing=std::async(std::launch::async,[pending,request]{pending.get()->sync_cells(request);}).share();
+        }
         engine_->context()->set_property("_wetype_mode",mode_id);
     }
     void ensure(){
@@ -162,6 +172,14 @@ class Translator:public rime::Translator {
         if(lexicon_preparing.valid()){
             try{lexicon_preparing.get();engine_->context()->set_property("_wetype_dictionary_error","");}
             catch(const std::exception &e){engine_->context()->set_property("_wetype_dictionary_error",e.what());dictionary_request.reset();}
+        }
+        if(cells_preparing.valid()){
+            try{
+                cells_preparing.get();engine_->context()->set_property("_wetype_cell_dicts_error","");
+                engine_->context()->set_property("_wetype_cell_dicts_count",std::to_string(cell_ids.size()));
+            }catch(const std::exception &e){
+                engine_->context()->set_property("_wetype_cell_dicts_error",e.what());cells_request.reset();
+            }
         }
         if(!session)session=host->open(mode_id,emoji_enabled);
     }
@@ -190,7 +208,7 @@ class Translator:public rime::Translator {
                 }
                 context_sampled=true;
             }
-            auto result=host->query(session,input,before_text,dictionary_request);active=true;
+            auto result=host->query(session,input,before_text,dictionary_request,cells_request);active=true;
             // Promote only exact, full-coverage rows actually returned by the
             // engine. Preserve their original indices for native feedback.
             const bool words_available=words_valid&&ctx->get_property("_wetype_user_words_error").empty();
@@ -229,7 +247,7 @@ class Translator:public rime::Translator {
             for(size_t i=0;i<variants.size();++i){
                 try{
                     if(i>=fuzzy_sessions.size())fuzzy_sessions.push_back(host->open("quanpin",emoji_enabled));
-                    auto alternative=host->query(fuzzy_sessions[i],variants[i],before_text,dictionary_request);
+                    auto alternative=host->query(fuzzy_sessions[i],variants[i],before_text,dictionary_request,cells_request);
                     size_t count=0;
                     for(auto row:alternative.rows){
                         // Only complete branch matches are exposed. Partial
@@ -260,6 +278,19 @@ public:
         try{lexicon.load(engine_->schema()->config());lexicon_valid=true;ctx->set_property("_wetype_dictionary_error","");}
         catch(const std::exception &e){ctx->set_property("_wetype_dictionary_error",e.what());}
         ctx->set_property("_wetype_dictionary_entries",std::to_string(lexicon.entries.size()));
+        try{
+            auto config=engine_->schema()->config();auto item=config->GetItem("wetype/cell_dicts");
+            auto list=config->GetList("wetype/cell_dicts");
+            if(item&&item->type()!=rime::ConfigItem::kNull&&!list)throw std::runtime_error("wetype/cell_dicts must be a list");
+            std::set<string> seen;
+            if(list)for(size_t i=0;i<list->size();++i){
+                auto value=list->GetValueAt(i);
+                if(i>=32||!value||!CellDictionaries::valid_id(value->str())||!seen.insert(value->str()).second)
+                    throw std::runtime_error("invalid or duplicate native cell identifier");
+                cell_ids.push_back(value->str());
+            }
+            cells_valid=true;ctx->set_property("_wetype_cell_dicts_error","");
+        }catch(const std::exception &e){ctx->set_property("_wetype_cell_dicts_error",e.what());}
         choose_mode();
         Dl_info image{};
         if(dladdr(reinterpret_cast<void *>(&prepare),&image)&&image.dli_fname){
