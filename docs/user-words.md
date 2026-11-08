@@ -61,4 +61,6 @@ All pinyin layouts share native learning and hot-word storage; each Wubi variant
 
 Native imports accept up to 2,048 active entries, 128 bytes per code, 4,096 bytes per phrase and 2 MiB of combined phrase/code data. Unsupported configuration or rejected imports leave ordinary input available and set `_wetype_user_words_error`; deletion failures set `_wetype_delete_error`.
 
+Native input codes use ASCII letters, apostrophes and, in the relevant layouts, semicolons. Rows with other code characters or codes exceeding 128 bytes are skipped individually, so they do not disable valid phrases or their priority after deployment. Their source rows are preserved. `_wetype_user_words_skipped` and a count-only local log entry report how many codes were skipped; negative-weight rows are intentionally excluded and are not counted as incompatible.
+
 The adapter does not log table contents. Vendor diagnostics can contain words and remain local `.log` files excluded from Git. Workers retain the network-denied policy and run independently of the official WeType application.

@@ -42,12 +42,25 @@ int main(int argc,char **argv){
             std::string code=std::string(schema).find("wubi")!=std::string::npos?"wu":"wtrime";
             std::string word=code=="wu"?"五笔用户词":"引擎用户词";
             auto menu=rows(id,code);auto index=find(menu,word);
+            auto skipped_codes=property(id,"_wetype_user_words_skipped");
+            require(skipped_codes.empty()||skipped_codes=="0","valid codes unexpectedly skipped");
             require(menu[0]==(code=="wu"?"首选五笔词":"高权重用户词"),"custom_phrase weight did not promote native candidate");
             require(index==1,"lower-weight custom phrase did not precede ordinary candidates");
             require(api->select_candidate_on_current_page(id,index),"cannot select configured native word");
             require(committed(id)==word,"configured word commit mismatch");
             printf("PASS native user word and selection in %s\n",schema);
         }
+        // Match a frontend redeploy: keep librime and the native host alive,
+        // replace sessions, and read a table edited since the first load.
+        api->destroy_session(id);api->cleanup_all_sessions();
+        {
+            std::ofstream edited(std::string(argv[1])+"/custom_phrase.txt",std::ios::app);
+            edited<<"不适配编码甲\tcis男\t3\n不适配编码乙\tcis女\t2\n";
+        }
+        api->start_maintenance(true);api->join_maintenance_thread();
+        id=api->create_session();require(api->select_schema(id,"wetype"),"redeploy lost scheme");api->set_option(id,"ascii_mode",false);
+        require(rows(id,"wtrime")[0]=="高权重用户词","redeploy lost custom_phrase priority");
+        require(property(id,"_wetype_user_words_skipped")=="2","redeploy did not reread edited table");
         require(api->select_schema(id,"wetype_quanpin"),"cannot select fuzzy scheme");api->set_option(id,"ascii_mode",false);
         api->set_option(id,"wetype_fuzzy",true);
         require(rows(id,"qin")[0]=="精准短语","fuzzy candidates preceded exact custom phrase");

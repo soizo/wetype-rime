@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Fix custom-phrase priority disappearing after deployment when one code falls outside the native input alphabet. Skip those codes individually, preserve the source table and report a local count; cover table edits and redeployment without restarting librime.
+
 - Prioritise exact native custom_phrase matches with the conventional initial_quality setting and row weights, preserving native selection/deletion identifiers and batched input.
 
 - Use the conventional custom_phrase configuration and existing Rime text tables; remove the separate user-word settings file. Respect an explicitly configured official phrase translator and inherit default key bindings and recogniser rules.

@@ -18,13 +18,14 @@ struct RimeUserWords {
     std::vector<std::pair<std::string,std::string>> entries;
     std::map<std::pair<std::string,std::string>,int> weights;
     double initial_quality=99;
+    size_t skipped_codes=0;
     std::optional<int> priority(const std::string &code,const std::string &text) const {
         if(initial_quality<=0)return {};
         auto at=weights.find({code,text});
         return at==weights.end()?std::optional<int>():at->second;
     }
     void load(rime::Config *config){
-        source.clear();entries.clear();weights.clear();initial_quality=99;
+        source.clear();entries.clear();weights.clear();initial_quality=99;skipped_codes=0;
         config->GetDouble("custom_phrase/initial_quality",&initial_quality);
         if(!std::isfinite(initial_quality))throw std::runtime_error("invalid custom_phrase initial_quality");
         std::string name,db_class="stabledb";
@@ -64,9 +65,14 @@ struct RimeUserWords {
             code.erase(std::remove(code.begin(),code.end(),' '),code.end());
             int weight=rime::UserDbValue(value).commits;
             if(weight<0)continue;
+            // Rime tables can contain codes outside this backend's alphabet.
+            // Keep those rows in the source; import the representable rows.
+            if(code.empty()||code.size()>128||
+               code.find_first_not_of("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';")!=std::string::npos){
+                ++skipped_codes;continue;
+            }
             bytes+=code.size()+text.size();
-            if(code.empty()||code.size()>128||text.empty()||text.size()>4096||text.find('\0')!=std::string::npos||
-               code.find_first_not_of("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';")!=std::string::npos||
+            if(text.empty()||text.size()>4096||text.find('\0')!=std::string::npos||
                entries.size()>=2048||bytes>2*1024*1024)
                 throw std::runtime_error("invalid or oversized Rime user-word table");
             weights[{code,text}]=weight;

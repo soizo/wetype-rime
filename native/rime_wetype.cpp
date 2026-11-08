@@ -234,13 +234,18 @@ public:
         auto ctx=engine_->context();
         try{user_words.load(engine_->schema()->config());words_valid=true;ctx->set_property("_wetype_user_words_error","");}
         catch(const std::exception &e){ctx->set_property("_wetype_user_words_error",e.what());}
+        ctx->set_property("_wetype_user_words_skipped",std::to_string(user_words.skipped_codes));
         choose_mode();
         Dl_info image{};
         if(dladdr(reinterpret_cast<void *>(&prepare),&image)&&image.dli_fname){
             ctx->set_property("_wetype_adapter",image.dli_fname);
             string log;
             if(engine_->schema()->config()->GetString("wetype/log_file",&log))
-                if(FILE *f=fopen(log.c_str(),"a")){fprintf(f,"[wetype] adapter ready: %s\n",image.dli_fname);fclose(f);}
+                if(FILE *f=fopen(log.c_str(),"a")){
+                    fprintf(f,"[wetype] adapter ready: %s\n",image.dli_fname);
+                    if(words_valid&&user_words.skipped_codes)fprintf(f,"[wetype] custom_phrase incompatible codes skipped=%zu\n",user_words.skipped_codes);
+                    fclose(f);
+                }
         }
         // Grouped official notifications precede Rime's ungrouped OnSelect;
         // selection is delivered before it advances the composition segment.

@@ -72,6 +72,8 @@ The adapter uses Rime's official C++ component and module interfaces. Lua only l
 
 Phrase priority is applied only to exact, full-coverage rows already returned by the native engine. A configuration-time index supplies row weights; promoted candidates receive `custom_phrase/initial_quality`, and equal weights retain native ordering. Their original native row indices and tickets survive reordering, including numeric selection and deletion. Ordinary candidates and fuzzy branches retain their existing ordering after the promoted phrases. No extra engine query or text-table read is added to a keystroke.
 
+Incompatible text-table codes are isolated before batching, rather than rejecting the whole table and losing its priority index. Counts are exposed through `_wetype_user_words_skipped` and local diagnostics without logging phrase contents. The user-word regression edits a previously valid table, adds incompatible codes, then runs maintenance and recreates sessions in the same librime process; the native host stays alive. This covers frontend deployment as well as full reinitialisation.
+
 The engine and dependent frameworks are copied from a local WeType application. The executable copy is converted into a loadable bundle; algorithm code and model data are not patched. The original application's directory is denied during worker execution.
 
 Preceding text is sampled once per composition through the current IMK client, excluding marked text, with a maximum request of 256 UTF-16 units. Unsupported clients and secure input fall back to ordinary input. This bridge is specific to the validated Squirrel implementation and needs review when that frontend changes.
