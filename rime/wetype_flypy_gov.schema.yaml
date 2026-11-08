@@ -24,7 +24,7 @@ __patch:
         states: [半角, 全角]
       - name: wetype_surrounding
         reset: 1
-        states: [前文联想关, 前文联想开]
+        states: [上下文联想关, 上下文联想开]
       - name: wetype_fuzzy
         reset: 1
         states: [精准音, 模糊音]

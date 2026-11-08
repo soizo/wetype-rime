@@ -18,4 +18,10 @@ static inline void wetype_session_expressions(unsigned char *config, unsigned fl
 static inline void wetype_session_emoji(unsigned char *config, bool enabled) {
     wetype_session_expressions(config,enabled ? WETYPE_UNICODE_EMOJI : 0);
 }
+/* _wxime_wubi_config starts at session byte 36. */
+static inline void wetype_session_wubi(unsigned char *config, unsigned flags) {
+    config[36] = (flags & 1) != 0; // Native pinyin assistance.
+    config[39] = config[40] = (flags & 2) != 0; // Wildcard and code comments.
+    config[41] = 1;
+}
 #endif

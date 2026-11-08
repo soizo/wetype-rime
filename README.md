@@ -58,9 +58,15 @@ Daily operation uses an independent copy of the engine and resources. After a su
 
 Use number keys to select candidates, `-` / `=` or Page Up / Page Down to change pages, Esc to cancel, and Return to commit the raw input. Partial selections and selection feedback are passed back to the engine.
 
+Highlight a candidate and press **Control + Shift + P** to pin/unpin it first or **Control + Shift + B** to hide it for that input code. **Control + Shift + R** clears the current code's pin; **Control + Shift + U** restores its hidden candidates. Other candidates keep learning normally. Use standard **Control + Delete** for native learned-entry removal. See [candidate preferences](docs/user-words.md#candidate-pinning-and-blocking) for persistence, key configuration and limits.
+
+
+Wubi 86, Wubi 98 and New Century Wubi enable native pinyin assistance and code comments by default, in both the unified and standalone schemes. Type `nihao` to obtain 你好 with the Wubi code `wqvb`; ordinary Wubi candidates show remaining-code hints where available, and `z` wildcard queries show matching codes. Use **五笔拼音辅助开 / 关** and **五笔编码注释开 / 关** in the scheme menu to control them independently. With pinyin assistance enabled, typing beyond four keys keeps the composition open; disabling it restores four-code selection on the next letter.
+
+
 The engine's syllable boundaries appear in the preedit, for example `ni'hao'zhong'guo`. Uppercase and mixed-case input such as `ABC`, `OpenAI` and `iPhone` is forwarded unchanged.
 
-The scheme options include **前文联想开 / 前文联想关** to enable or disable preceding-text context. When enabled, a bounded prefix from the current editor is supplied locally to the engine once per composition. Editors that cannot provide context continue with ordinary input.
+The scheme options include **上下文联想开 / 上下文联想关** to enable or disable editor context. When enabled, bounded text before and after the current selection, and the selected text itself, are supplied locally to the engine once per composition. Marked composition text is excluded. Before reaching the engine, all three fields are converted to simplified Chinese with Rime's OpenCC `t2s.json`, independently of the candidate-output script switch. If conversion is unavailable, context is omitted and ordinary input continues. Each field is limited to 256 UTF-16 units and 1,024 UTF-8 bytes; oversized selections are omitted. Editors that cannot provide context continue with ordinary input.
 
 ### Extracting Other Versions
 
@@ -152,7 +158,7 @@ Microsoft, Sogou and Ziguang double pinyin accept semicolon as part of the code.
 
 Engine workers run under a macOS policy that denies network access to the entire worker process and its children. Loading is refused without the required restriction. Communication with Rime uses local anonymous pipes, with no network listener, account login, cloud dictionary or synchronization service.
 
-The optional preceding-text feature does not read the clipboard. The adapter's diagnostic logs record context availability and byte counts, not the preceding text itself.
+The optional editor-context feature does not read the clipboard. The adapter's diagnostic logs record context availability and byte counts, not the editor text itself.
 
 Installed files live in `~/Library/Application Support/WetypeRime/`:
 

@@ -6,7 +6,7 @@ import subprocess
 import sys
 import uuid
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from wetype.integration import build, stage, register_scheme, DEFAULT_SOURCE, SQUIRREL
+from wetype.integration import build, stage, register_scheme, DEFAULT_SOURCE, DEFAULT_BOOST_INCLUDE, SQUIRREL
 from wetype.macos import ROOT
 from wetype.modes import SCHEMAS, SAVE_OPTIONS_PATCH
 from fixture_cleanup import compact
@@ -35,7 +35,7 @@ else:(user/'default.custom.yaml').write_text('patch:\n  schema_list:\n'+''.join(
 logs.mkdir()
 subprocess.run(['/usr/bin/clang++','-std=c++17','-fobjc-arc','-c',str(ROOT/'tests/imk_fixture.mm'),
                 '-o',str(ROOT/'build/imk-fixture.o')],check=True)
-subprocess.run(['/usr/bin/clang++','-std=c++17','-Wno-missing-field-initializers','-I'+str(DEFAULT_SOURCE/'src'),'-I'+str(ROOT/'build/include'),
+subprocess.run(['/usr/bin/clang++','-std=c++17','-Wno-missing-field-initializers','-I'+str(DEFAULT_BOOST_INCLUDE),'-I'+str(DEFAULT_SOURCE/'src'),'-I'+str(ROOT/'build/include'),
                 str(ROOT/'tests/rime_smoke.cpp'),str(ROOT/'build/imk-fixture.o'),str(SQUIRREL/'Frameworks/librime.1.dylib'),'-framework','AppKit',
                 '-Wl,-rpath,'+str(SQUIRREL/'Frameworks'),'-o',str(ROOT/'build/rime-smoke')],check=True)
 with (logs/'acceptance.log').open('w') as output:

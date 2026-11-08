@@ -21,8 +21,8 @@ def read():
     if not line or line.startswith('ERROR '):raise RuntimeError(line)
     return line
 def send(line):p.stdin.write(line+'\n');p.stdin.flush()
-def query(sid,text,before):
-    send('QUERY '+sid+' '+text.encode().hex()+' '+(before.encode().hex() or '-'))
+def query(sid,text,before,after="",on=""):
+    send('QUERY '+sid+' '+text.encode().hex()+' '+' '.join(field.encode().hex() or '-' for field in (before,after,on)))
     tag,ticket,count=read().split();assert tag=='RESULT' and int(count)>0
     for _ in range(int(count)):assert read().startswith('C ')
     assert read()=='END'
@@ -32,7 +32,7 @@ try:
     assert read()=='READY'
     send('OPEN');first=read().split()[1]
     send('OPEN');second=read().split()[1]
-    query(first,'nihao','我喜欢中文😀')
+    query(first,'nihao','我喜欢中文😀','后文🌏','选中😀')
     query(second,'nihao','另一个编辑框')
     query(first,'niha','我喜欢中文😀')
     query(first,'nihao','我喜欢中文😀')
@@ -41,6 +41,10 @@ try:
     send('RESET '+first);assert read()=='OK'
     query(first,'nihao','')
     query(second,'nihao','另一个编辑框')
+    query(first,'nihao','','只改变后文')
+    query(first,'nihao','','后文变化','选中文字')
+    query(first,'nihao','','后文变化','另一段')
+    query(first,'nihao','')
     send('QUIT');p.wait(timeout=15);assert p.returncode==0
     (base/'logs').mkdir(exist_ok=True)
     summary='PASS: engine snapshots match UTF-8 context; independent sessions, delete/retype, cursor-context change and reset clearing.\n'

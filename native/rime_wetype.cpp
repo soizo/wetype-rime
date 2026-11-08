@@ -19,11 +19,13 @@
 #include <functional>
 #include "engine_client.h"
 #include "surrounding_text.h"
+#include "rime_text_context.h"
 #include "rime_fuzzy.h"
 #include "rime_user_words.h"
 #include "rime_lexicon.h"
 #include "cell_dicts.h"
 #include "session_options.h"
+#include "candidate_preferences.h"
 namespace wetype {
 static const InputMode &selected_mode(rime::Engine *engine){
     string fixed;engine->schema()->config()->GetString("wetype/mode",&fixed);
@@ -43,9 +45,12 @@ public:
         const auto &mode=selected_mode(engine_);
         if(key.keycode()==';'&&!mode.semicolon)return rime::kNoop;
         auto ctx=engine_->context();
-        // Match the official speller's max-code-length selection behavior,
-        // but only for Wubi; pinyin remains an unrestricted composition.
-        if(mode.keyboard==5&&!key.release()&&!key.ctrl()&&!key.alt()&&!key.super()&&
+        // Mixed pinyin can exceed four keys. Only force four-code selection
+        // when pinyin assistance is disabled; otherwise keep the composition.
+        string pinyin_option;
+        bool assisted=!engine_->schema()->config()->GetString("wetype/wubi_pinyin_option",&pinyin_option)
+            ||pinyin_option.empty()||ctx->get_option(pinyin_option);
+        if(mode.keyboard==5&&!assisted&&!key.release()&&!key.ctrl()&&!key.alt()&&!key.super()&&
            key.keycode()>='a'&&key.keycode()<='z'&&ctx->caret_pos()==ctx->input().size()){
             auto candidate=ctx->GetSelectedCandidate();
             if(candidate&&candidate->end()==ctx->input().size()&&candidate->end()-candidate->start()==4)
@@ -82,7 +87,29 @@ public:
     uint64_t ticket,session;size_t index;
     string mode;
     WetypeCandidate(size_t start,const Row &row,uint64_t revision,uint64_t id,const string &mode_id)
-        :rime::SimpleCandidate("wetype",start,start+row.cover,row.text,"",row.preedit),ticket(revision),session(id),index(row.index),mode(mode_id){}
+        :rime::SimpleCandidate("wetype",start,start+row.cover,row.text,row.comment,row.preedit),ticket(revision),session(id),index(row.index),mode(mode_id){}
+};
+class CandidateActions:public rime::Processor {
+public:
+    explicit CandidateActions(const rime::Ticket &ticket):rime::Processor(ticket){}
+    rime::ProcessResult ProcessKeyEvent(const rime::KeyEvent &key) override{
+        auto ctx=engine_->context();
+        if(key.release()||ctx->input().empty())return rime::kNoop;
+        for(const char *action:{"pin","block","unpin","restore"}){
+            string binding;
+            if(!engine_->schema()->config()->GetString(string("wetype/candidate_keys/")+action,&binding)||binding.empty())continue;
+            if(!(key==rime::KeyEvent(binding)))continue;
+            if(!ctx->HasMenu()&&(string(action)=="pin"||string(action)=="block"))return rime::kNoop;
+            auto own=std::dynamic_pointer_cast<WetypeCandidate>(rime::Candidate::GetGenuineCandidate(ctx->GetSelectedCandidate()));
+            if(!own&&(string(action)=="pin"||string(action)=="block"))return rime::kNoop;
+            ctx->set_property("_wetype_candidate_code",own&&(string(action)=="pin"||string(action)=="block")?ctx->input().substr(own->start(),own->end()-own->start()):ctx->input());
+            ctx->set_property("_wetype_candidate_text",own?own->text():string());
+            ctx->set_property("_wetype_candidate_action",action);
+            ctx->set_option("_wetype_candidate_action",!ctx->get_option("_wetype_candidate_action"));
+            return rime::kAccepted;
+        }
+        return rime::kNoop;
+    }
 };
 class DeferredTranslation:public rime::Translation {
     std::function<rime::an<rime::Translation>()> load;
@@ -105,7 +132,7 @@ class Translator:public rime::Translator {
     uint64_t session=0;
     rime::connection selected,updated,option_changed,deleted;
     bool active=false;
-    unsigned expression_flags=0;
+    unsigned expression_flags=0,wubi_flags=3;
     bool fuzzy_enabled=false;
     RimeFuzzy fuzzy;
     std::vector<uint64_t> fuzzy_sessions;
@@ -121,7 +148,8 @@ class Translator:public rime::Translator {
     std::shared_ptr<const string> cells_request;
     std::shared_future<void> cells_preparing;
     string launcher,mode_id;
-    string before_text;
+    SurroundingText text_context;
+    ContextSimplifier context_simplifier;
     string logged_context_source;
     bool context_sampled=false;
     std::shared_ptr<int> lifetime=std::make_shared<int>(0);
@@ -144,7 +172,12 @@ class Translator:public rime::Translator {
         const auto &mode=selected_mode(engine_);
         unsigned expressions=requested_expressions();
         bool use_fuzzy=requested_fuzzy();
-        if(mode_id==mode.id&&expression_flags==expressions&&fuzzy_enabled==use_fuzzy)return;
+        auto enabled=[&](const char *key){
+            string option;
+            return !engine_->schema()->config()->GetString(key,&option)||option.empty()||engine_->context()->get_option(option);
+        };
+        unsigned wubi=mode.keyboard==5?((enabled("wetype/wubi_pinyin_option")?1:0)|(enabled("wetype/wubi_comment_option")?2:0)):0;
+        if(mode_id==mode.id&&expression_flags==expressions&&fuzzy_enabled==use_fuzzy&&wubi_flags==wubi)return;
         string path;
         auto config=engine_->schema()->config();
         if(!config->GetString(string("wetype/launchers/")+mode.group,&path))
@@ -153,11 +186,11 @@ class Translator:public rime::Translator {
         if(host&&session)host->command("CLOSE "+std::to_string(session));
         if(host)for(auto id:fuzzy_sessions)host->command("CLOSE "+std::to_string(id));
         fuzzy_sessions.clear();
-        session=0;active=false;before_text.clear();context_sampled=false;
+        session=0;active=false;text_context={};context_sampled=false;
         bool changed_host=path!=launcher;
         if(changed_host){host.reset();preparing={};words_preparing={};lexicon_preparing={};cells_preparing={};launcher=path;}
         mode_id=mode.id;
-        expression_flags=expressions;
+        expression_flags=expressions;wubi_flags=wubi;
         fuzzy_enabled=use_fuzzy;
         try{
             if(fuzzy_enabled)fuzzy.load(config,mode_id);
@@ -202,7 +235,7 @@ class Translator:public rime::Translator {
                 engine_->context()->set_property("_wetype_cell_dicts_error",e.what());cells_request.reset();
             }
         }
-        if(!session)session=host->open(mode_id,expression_flags);
+        if(!session)session=host->open(mode_id,expression_flags,wubi_flags);
     }
     void error(const std::exception &e){
         string path;if(engine_->schema()->config()->GetString("wetype/log_file",&path))
@@ -216,20 +249,29 @@ class Translator:public rime::Translator {
             auto ctx=engine_->context();
             if(!context_sampled){
                 if(ctx->get_option("wetype_surrounding")){
-                    auto context=surrounding_text();before_text=context.before;
-                    ctx->set_property("_wetype_context_source",context.available?"imk":"unavailable");
-                }else{before_text.clear();ctx->set_property("_wetype_context_source","disabled");}
-                ctx->set_property("_wetype_context_bytes",std::to_string(before_text.size()));
+                    text_context=surrounding_text();
+                    ctx->set_property("_wetype_context_source",text_context.available?"imk":"unavailable");
+                    if(text_context.available)try{
+                        context_simplifier.convert(text_context);
+                        ctx->set_property("_wetype_context_error","");
+                    }catch(const std::exception &e){
+                        text_context={};ctx->set_property("_wetype_context_source","conversion-error");
+                        ctx->set_property("_wetype_context_error",e.what());
+                    }
+                }else{text_context={};ctx->set_property("_wetype_context_source","disabled");}
+                ctx->set_property("_wetype_context_bytes",std::to_string(text_context.before.size()));
+                ctx->set_property("_wetype_context_after_bytes",std::to_string(text_context.after.size()));
+                ctx->set_property("_wetype_context_on_bytes",std::to_string(text_context.on.size()));
                 string source=ctx->get_property("_wetype_context_source");
                 if(source!=logged_context_source){
                     string path;
                     if(engine_->schema()->config()->GetString("wetype/log_file",&path))
-                        if(FILE *f=fopen(path.c_str(),"a")){fprintf(f,"[wetype] surrounding source=%s bytes=%zu\n",source.c_str(),before_text.size());fclose(f);}
+                        if(FILE *f=fopen(path.c_str(),"a")){fprintf(f,"[wetype] surrounding source=%s bytes=%zu\n",source.c_str(),text_context.before.size());fclose(f);}
                     logged_context_source=source;
                 }
                 context_sampled=true;
             }
-            auto result=host->query(session,input,before_text,dictionary_request,cells_request);active=true;
+            auto result=host->query(session,input,text_context.before,dictionary_request,cells_request,text_context.after,text_context.on);active=true;
             // Promote only exact, full-coverage rows actually returned by the
             // engine. Preserve their original indices for native feedback.
             const bool words_available=words_valid&&ctx->get_property("_wetype_user_words_error").empty();
@@ -240,24 +282,33 @@ class Translator:public rime::Translator {
             auto configured_phrase=[&](const Row &row,const string &code){
                 return words_available&&row.cover<=code.size()&&user_words.contains(code.substr(0,row.cover),row.text);
             };
+            std::unique_ptr<CandidatePreferences> preferences;
+            try{preferences=std::make_unique<CandidatePreferences>(mode_id);ctx->set_property("_wetype_candidate_error","");}
+            catch(const std::exception &e){ctx->set_property("_wetype_candidate_error",e.what());}
+            auto pinned=[&](const Row &row){return preferences&&preferences->pinned(input.substr(0,row.cover),row.text);};
             size_t phrases=0;
             for(const auto &row:result.rows)if(phrase_priority(row))++phrases;
-            if(phrases)std::stable_sort(result.rows.begin(),result.rows.end(),[&](const Row &a,const Row &b){
+            std::stable_sort(result.rows.begin(),result.rows.end(),[&](const Row &a,const Row &b){
+                if(pinned(a)!=pinned(b))return pinned(a);
                 auto left=phrase_priority(a),right=phrase_priority(b);
                 if(bool(left)!=bool(right))return bool(left);
                 return left&&right&&*left>*right;
             });
             auto variants=fuzzy_enabled&&ctx->get_property("_wetype_fuzzy_error").empty()?fuzzy.variants(input):std::vector<string>{};
             std::set<std::pair<string,size_t>> seen;
+            std::vector<std::pair<bool,std::shared_ptr<WetypeCandidate>>> ordered;
             auto append=[&](const Row &row,uint64_t ticket,uint64_t id,bool is_fuzzy,bool custom_phrase){
+                if(preferences&&preferences->blocked(input.substr(0,row.cover),row.text))return;
                 if(!variants.empty()&&!seen.insert({row.text,row.cover}).second)return;
                 auto candidate=std::make_shared<WetypeCandidate>(start,row,ticket,id,mode_id);
                 // Use the same candidate type as Rime's user-table translator,
                 // so standard simplifier/excluded_types can preserve literals.
+                if(pinned(row))candidate->set_quality(1000);
                 if(custom_phrase)candidate->set_type("user_table");
-                if(!is_fuzzy&&phrase_priority(row))candidate->set_quality(user_words.initial_quality);
+                if(!pinned(row)&&!is_fuzzy&&phrase_priority(row))candidate->set_quality(user_words.initial_quality);
                 if(is_fuzzy){if(!custom_phrase)candidate->set_type("wetype_fuzzy");candidate->set_comment("模糊");}
-                out->Append(candidate);
+                if(pinned(row))candidate->set_comment(candidate->comment().empty()?"置顶":"置顶 · "+candidate->comment());
+                ordered.emplace_back(pinned(row),candidate);
             };
             // Custom phrases precede the first three ordinary exact candidates,
             // followed by bounded fuzzy choices.
@@ -268,7 +319,7 @@ class Translator:public rime::Translator {
             for(size_t i=0;i<variants.size();++i){
                 try{
                     if(i>=fuzzy_sessions.size())fuzzy_sessions.push_back(host->open("quanpin",expression_flags));
-                    auto alternative=host->query(fuzzy_sessions[i],variants[i],before_text,dictionary_request,cells_request);
+                    auto alternative=host->query(fuzzy_sessions[i],variants[i],text_context.before,dictionary_request,cells_request,text_context.after,text_context.on);
                     size_t count=0;
                     for(auto row:alternative.rows){
                         // Only complete branch matches are exposed. Partial
@@ -282,6 +333,8 @@ class Translator:public rime::Translator {
                 }catch(const std::exception &e){ctx->set_property("_wetype_fuzzy_error",e.what());}
             }
             for(size_t i=head;i<result.rows.size();++i)append(result.rows[i],result.ticket,session,false,configured_phrase(result.rows[i],input));
+            std::stable_sort(ordered.begin(),ordered.end(),[](const auto &a,const auto &b){return a.first>b.first;});
+            for(auto &item:ordered)out->Append(item.second);
             engine_->context()->set_property("_wetype_error","");
         }catch(const std::exception &e){
             error(e);out->Append(std::make_shared<rime::SimpleCandidate>("wetype_error",start,end,input,"引擎暂不可用，回车保留原文"));
@@ -293,6 +346,8 @@ public:
         // Only pipe/worker startup runs in the background; all Rime objects and
         // candidate/context operations remain on the frontend's own thread.
         auto ctx=engine_->context();
+        try{context_simplifier.initialise(engine_);}
+        catch(const std::exception &e){ctx->set_property("_wetype_context_error",e.what());}
         try{user_words.load(engine_->schema()->config());words_valid=true;ctx->set_property("_wetype_user_words_error","");}
         catch(const std::exception &e){ctx->set_property("_wetype_user_words_error",e.what());}
         ctx->set_property("_wetype_user_words_skipped",std::to_string(user_words.skipped_codes));
@@ -347,7 +402,7 @@ public:
         });
         updated=ctx->update_notifier().connect(-100,[this](rime::Context *c){
             if(c->input().empty()){
-                before_text.clear();context_sampled=false;c->set_property("_wetype_context_bytes","0");
+                text_context={};context_sampled=false;c->set_property("_wetype_context_bytes","0");c->set_property("_wetype_context_after_bytes","0");c->set_property("_wetype_context_on_bytes","0");
                 if(active&&host){active=false;try{
                     host->command("RESET "+std::to_string(session));
                     for(auto id:fuzzy_sessions)host->command("RESET "+std::to_string(id));
@@ -355,12 +410,20 @@ public:
             }
         });
         option_changed=ctx->option_update_notifier().connect([this](rime::Context *c,const string &name){
+            if(name=="_wetype_candidate_action"){
+                auto action=c->get_property("_wetype_candidate_action");
+                try{
+                    {CandidatePreferences preferences(mode_id);preferences.change(action,c->get_property("_wetype_candidate_code"),c->get_property("_wetype_candidate_text"));}
+                    c->set_property("_wetype_candidate_error","");c->RefreshNonConfirmedComposition();
+                }catch(const std::exception &e){c->set_property("_wetype_candidate_error",e.what());}
+                return;
+            }
             string fuzzy_option;
             if(engine_->schema()->config()->GetString("wetype/fuzzy_option",&fuzzy_option)&&name==fuzzy_option){
                 try{choose_mode();c->Clear();}catch(const std::exception &e){error(e);}
                 return;
             }
-            for(const char *key:{"wetype/emoji_option","wetype/kaomoji_option","wetype/symbol_emoji_option"}){
+            for(const char *key:{"wetype/emoji_option","wetype/kaomoji_option","wetype/symbol_emoji_option","wetype/wubi_pinyin_option","wetype/wubi_comment_option"}){
                 string option;
                 if(engine_->schema()->config()->GetString(key,&option)&&name==option){
                     try{choose_mode();c->Clear();}catch(const std::exception &e){error(e);}
@@ -368,7 +431,7 @@ public:
                 }
             }
             if(name=="wetype_surrounding"){
-                before_text.clear();context_sampled=false;
+                text_context={};context_sampled=false;
                 if(active)c->Clear();
                 return;
             }
@@ -396,6 +459,7 @@ public:
 static void rime_wetype_initialize(){
     wetype::install_imk_context();
     rime::Registry::instance().Register("wetype_translator",new rime::Component<wetype::Translator>);
+    rime::Registry::instance().Register("wetype_candidate_actions",new rime::Component<wetype::CandidateActions>);
     rime::Registry::instance().Register("wetype_speller",new rime::Component<wetype::ModeSpeller>);
     rime::Registry::instance().Register("wetype_expression_translator",new rime::Component<wetype::ExpressionTableTranslator>);
 }

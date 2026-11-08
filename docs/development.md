@@ -9,7 +9,7 @@ This release targets Apple Silicon macOS and the engine/frontend versions listed
 - `wetype/modes.json`: input-mode catalog used to generate schemas and native settings.
 - `native/worker.cpp`: persistent engine host and local pipe protocol.
 - `native/rime_wetype.cpp`: official Rime Translator, Candidate, notifications and module entry point.
-- `native/surrounding_text.mm`: bounded IMK preceding-text access during input events.
+- `native/surrounding_text.mm`: bounded IMK editor-context access during input events.
 - `native/offline.sb`: network restriction and source-application isolation policy.
 - `rime/`: all 12 editable scheme YAML files and the small librime-lua module loader. Schemes are copied verbatim, not generated from modes.json.
 - `examples/rime-extensions/`: opt-in native Rime phrase, exact-input replacement and script-conversion examples; never installed automatically.
@@ -46,7 +46,7 @@ python3 tests/smoke_config.py
 python3 tests/smoke_user_words.py
 ```
 
-The checks cover real candidates, selection feedback, partial selection, persistent learning, uppercase input, syllable boundaries, deletion and context isolation. The real-librime test also exercises the unified options, standalone modes, preceding-text behavior and module reinitialization. Native snapshot checks use a test-only command that is not compiled into the production worker.
+The checks cover real candidates, selection feedback, partial selection, persistent learning, uppercase input, syllable boundaries, deletion and context isolation. The real-librime test also exercises the unified options, standalone modes, editor-context behaviour and module reinitialization. Native snapshot checks use a test-only command that is not compiled into the production worker.
 
 `smoke_config.py` uses already-built binaries and an isolated profile to deploy the optional phrase, exact-input replacement and simplified/traditional examples together. Use `--feature phrases`, `--feature force` or `--feature traditional` to test each independently. It requires the validated macOS Squirrel build and never changes a live profile.
 
@@ -78,7 +78,7 @@ Incompatible text-table codes are isolated before batching, rather than rejectin
 
 The engine and dependent frameworks are copied from a local WeType application. The executable copy is converted into a loadable bundle; algorithm code and model data are not patched. The original application's directory is denied during worker execution.
 
-Preceding text is sampled once per composition through the current IMK client, excluding marked text, with a maximum request of 256 UTF-16 units. Unsupported clients and secure input fall back to ordinary input. This bridge is specific to the validated Squirrel implementation and needs review when that frontend changes.
+Text before and after the selection, plus the selected text, is sampled once per composition through the current IMK client. Marked composition text is excluded. Each request is bounded to 256 UTF-16 units and each field to 1,024 UTF-8 bytes; oversized selections are omitted. Unsupported individual ranges remain empty. Before transmission, `native/rime_text_context.h` uses librime's own `SimplifierComponent` and `t2s.json` resource lookup to convert all three fields to simplified Chinese once per composition. It is independent of candidate-output switches and restores its temporary private configuration immediately after initialisation. Missing conversion resources omit context and set `_wetype_context_error`; ordinary candidates remain available. Clipboard and extra engine fields remain empty. The existing `wetype_surrounding` option controls all three fields; the local QUERY protocol accepts optional suffix and selection fields after its existing prefix field for backwards compatibility. Changes to any field reset the native composition, including fuzzy branches. Unsupported clients and secure input fall back to ordinary input. This bridge is specific to the validated Squirrel implementation and needs review when that frontend changes.
 
 `python3 tests/smoke_expressions.py` validates independent local expression flags,
 native candidate feedback and double pinyin, then exercises Rime's official
@@ -88,3 +88,17 @@ unrelated, cloud, WeChat and AI configuration fields untouched, and that stale
 Plus masks cannot set the native Plus flag. Worker tests reject those masks;
 Rime tests confirm that obsolete Plus bindings cannot reactivate it. The
 [expression guide](expressions.md) documents the supported features.
+
+## Wubi assistance
+
+The validated Mac 3.0.1 ABI places `_wxime_wubi_config` at session byte 36. Pinyin assistance uses byte 36, wildcard comments byte 39, ordinary comments byte 40 and candidate output byte 41. Both assistance options default to enabled; automatic native emission stays disabled. Rime's four-code forced selection applies only when pinyin assistance is off, allowing longer pinyin input when it is on.
+
+`OPEN <mode> [expression_flags] [wubi_flags]` accepts an optional Wubi mask (1 for pinyin assistance, 2 for code comments, default 3). The existing `QUERY` context fields can be followed by `1` to request an additional hex-encoded comment field per row. Legacy requests retain the original row format. Comments are copied before the native iterator is released; candidate IDs, coverage, tickets and selection feedback retain their existing semantics. The two Rime switches reopen the native session and clear stale composition. Pinyin modes ignore Wubi configuration.
+
+Run `python3 tests/smoke_wubi.py` against the local librime source to verify all three variants in standalone and unified schemes, default options, pinyin selection and commit, remaining-code and wildcard hints, and independent off/on toggles.
+
+## Candidate preferences
+
+`native/candidate_preferences.h` maintains a locked, atomically replaced hex-encoded preference snapshot in the Rime user directory. Entries use layout/code keys; pins contain one word, blocks contain a set. The processor captures the original native candidate text and covered code before notifying the translator: Rime's option notifier may refresh the menu and reset the highlighted index before translator callbacks run. Reordering and filtering occur without changing native tickets or indices. Fuzzy branches use displayed input coverage for preferences. Read failures leave ordinary input available with `_wetype_candidate_error`.
+
+The native image exports `wxime_add_hard_fixed_position_user_word`, but its trailing flags have not been validated, so this implementation does not call it. Existing native learned-entry removal remains separate. Run `python3 tests/smoke_candidate_preferences.py` to exercise real Rime pinning, filtering, restoration, persistence across sessions and original-candidate commit in pinyin and Wubi; `tests/smoke_user_words.py` covers native learning deletion.

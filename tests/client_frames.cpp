@@ -17,6 +17,9 @@ int main(int argc,char **argv){
         auto result=client.query(session,"nihao");
         if(result.rows.size()!=1||result.rows[0].text!="你好"||result.rows[0].cover!=5||result.rows[0].preedit!="ni'hao")
             throw std::runtime_error("malformed frame corrupted the next response");
+        result=client.query(session,"nihao");
+        if(result.rows.size()!=1||result.rows[0].comment!="wqvb")
+            throw std::runtime_error("native code comment lost in transport");
         client.command("RESET "+std::to_string(session));
         puts("PASS: unsupported expression masks rejected; malformed frame consumed; next query remains usable");
     }catch(const std::exception &e){fprintf(stderr,"FAIL: %s\n",e.what());return 1;}

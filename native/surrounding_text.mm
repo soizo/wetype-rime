@@ -1,4 +1,4 @@
-// Read the current IMK client's bounded prefix through Apple's text-input API.
+// Read bounded editor context through the current IMK client's text-input API.
 // The event wrapper forwards the original call unchanged and retains no client.
 #import <InputMethodKit/InputMethodKit.h>
 #import <objc/runtime.h>
@@ -53,26 +53,36 @@ SurroundingText surrounding_text(){
         id<IMKTextInput> text_client=client;
         NSRange selection=[text_client selectedRange],marked=[text_client markedRange];
         if(selection.location==NSNotFound)return out;
-        // Exclude the whole marked composition, including converted prefixes.
-        NSUInteger anchor=marked.location!=NSNotFound&&marked.length?marked.location:selection.location;
-        NSUInteger length=std::min<NSUInteger>(anchor,256);
-        if(!length){out.available=true;return out;}
-        NSAttributedString *part=[text_client attributedSubstringFromRange:NSMakeRange(anchor-length,length)];
-        if(![part isKindOfClass:NSAttributedString.class])return out;
-        NSString *text=part.string;
-        // Clients may adjust a range by a surrogate pair, but must not return
-        // an unrelated selection or an unbounded document in its place.
-        if(!text||text.length>length+2)return out;
-        if(text.length>256){
-            NSUInteger start=text.length-256;
-            NSRange character=[text rangeOfComposedCharacterSequenceAtIndex:start];
-            if(character.location<start)start=NSMaxRange(character);
-            text=[text substringFromIndex:start];
-        }
-        NSData *utf8=[text dataUsingEncoding:NSUTF8StringEncoding allowLossyConversion:NO];
-        if(!utf8||utf8.length>1024)return out;
-        out.before.assign(static_cast<const char *>(utf8.bytes),utf8.length);
-        if(out.before.find('\0')!=std::string::npos){out.before.clear();return out;}
+        // Marked text belongs to this composition, never to its context.
+        const bool composing=marked.location!=NSNotFound&&marked.length;
+        NSRange excluded=composing?marked:selection;
+        if(excluded.length>NSUIntegerMax-excluded.location)return out;
+        auto read=[&](NSRange range,bool suffix)->std::string{
+            if(!range.length)return {};
+            @try{
+                NSAttributedString *part=[text_client attributedSubstringFromRange:range];
+                if(![part isKindOfClass:NSAttributedString.class])return {};
+                NSString *text=part.string;
+                if(!text||text.length>range.length+2)return {};
+                if(text.length>256){
+                    NSUInteger boundary=suffix?text.length-256:256;
+                    NSRange character=[text rangeOfComposedCharacterSequenceAtIndex:boundary];
+                    if(suffix){if(character.location<boundary)boundary=NSMaxRange(character);text=[text substringFromIndex:boundary];}
+                    else{text=[text substringToIndex:character.location];}
+                }
+                NSData *utf8=[text dataUsingEncoding:NSUTF8StringEncoding allowLossyConversion:NO];
+                if(!utf8||utf8.length>1024)return {};
+                std::string result(static_cast<const char *>(utf8.bytes),utf8.length);
+                return result.find('\0')==std::string::npos?result:std::string();
+            }@catch(NSException *){return {};}
+        };
+        NSUInteger length=std::min<NSUInteger>(excluded.location,256);
+        out.before=read(NSMakeRange(excluded.location-length,length),true);
+        NSUInteger end=NSMaxRange(excluded);
+        out.after=read(NSMakeRange(end,std::min<NSUInteger>(256,NSUIntegerMax-end)),false);
+        // A bounded selection is the text under the cursor. Do not substitute
+        // marked text, the clipboard or an arbitrary neighbouring character.
+        if(!composing&&selection.length<=256)out.on=read(selection,false);
         out.available=true;
     }@catch(NSException *){
         // Unsupported clients must never break keyboard input.

@@ -72,6 +72,35 @@ Candidate deletion does not rewrite the text table. A configured phrase can be i
 
 All pinyin layouts share native learning and hot-word storage; each Wubi variant has a separate store. Codes are not automatically converted between layouts. Rime's `.userdb` management tools do not edit WeType's binary learning data. Back up the runtime's `state/` directory as well as your text tables if you need both.
 
+## Candidate pinning and blocking
+
+Highlight a WeType candidate and use these default shortcuts:
+
+| Shortcut | Action |
+| --- | --- |
+| Control + Shift + P | Pin the highlighted candidate first; repeat on the pinned candidate to unpin |
+| Control + Shift + B | Hide the highlighted candidate for its covered input code |
+| Control + Shift + R | Remove the pin for the current complete input code |
+| Control + Shift + U | Restore all hidden candidates for the current complete input code |
+
+Pins and blocks are scoped to the input layout and literal covered code. Each code has at most one pin. Pinning a blocked word restores it; blocking a pinned word removes its pin. Other candidates retain their relative order and continue normal native learning. Pinned candidates display `置顶` in their comments. Selection continues to use the original native candidate identifier, including partial selection and converted display text. Custom-phrase priorities apply after the pin.
+
+These controls are independent of native learning deletion. Use the standard Control + Delete action described above to remove an accidentally learned entry. Blocking hides a candidate locally without deleting its underlying dictionary entry or learning record; restoring a block therefore does not undo a native deletion. Imported custom phrases must also be removed from their source table if they should not return after deployment.
+
+Preferences are saved in `wetype-candidates.state` in the Rime user directory, with a separate `.lock` file. Include this file in personal backups. Updates use a process lock and atomic replacement; they are shared across unified and standalone schemes using the same layout and survive session recreation and deployment. They are local adaptation rules, not native hard-fixed-position records. A pin promotes its word only when the engine returns it in the existing bounded candidate snapshot; it does not synthesise missing candidates or expand the 64-candidate limit. Blocks also apply to fuzzy candidates using their displayed input code. Ordinary official table-translator candidates are managed by that translator and are not changed by these shortcuts.
+
+Override shortcuts in a scheme patch, for example:
+
+```yaml
+patch:
+  wetype/candidate_keys/pin: Control+Shift+p
+  wetype/candidate_keys/block: Control+Shift+b
+  wetype/candidate_keys/unpin: Control+Shift+r
+  wetype/candidate_keys/restore: Control+Shift+u
+```
+
+Use an empty string to disable a shortcut. Finish the composition and deploy after editing key bindings. Preference read/write failures set `_wetype_candidate_error`; ordinary candidates remain available when preferences cannot be read.
+
 ## Limits and diagnostics
 
 Native imports accept up to 2,048 active entries, 128 bytes per code, 4,096 bytes per phrase and 2 MiB of combined phrase/code data. Unsupported configuration or rejected imports leave ordinary input available and set `_wetype_user_words_error`; deletion failures set `_wetype_delete_error`.

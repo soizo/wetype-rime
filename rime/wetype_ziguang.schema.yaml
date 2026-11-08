@@ -12,13 +12,14 @@ switches:
     states: [中文, 英文]
   - name: wetype_surrounding
     reset: 1
-    states: [前文联想关, 前文联想开]
+    states: [上下文联想关, 上下文联想开]
     abbrev: [前文关, 前文开]
 engine:
   processors:
     - lua_processor@*wetype_bootstrap
     - ascii_composer
     - recognizer
+    - wetype_candidate_actions
     - key_binder
     - wetype_speller
     - punctuator
@@ -58,6 +59,11 @@ ascii_composer:
 
 # 只引用安装器生成的接口路径，不包含引擎、词库或学习数据。
 wetype:
+  candidate_keys:
+    pin: Control+Shift+p
+    block: Control+Shift+b
+    unpin: Control+Shift+r
+    restore: Control+Shift+u
   __include: wetype.runtime:/wetype
   mode: ziguang
   # Native binary cell dictionaries; select identifiers in the scheme patch.

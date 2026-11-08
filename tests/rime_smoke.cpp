@@ -1,3 +1,4 @@
+#include "../native/rime_text_context.h"
 // Exercise the installed librime and its actual native component path.
 #include <rime_api.h>
 #include <dlfcn.h>
@@ -112,9 +113,11 @@ static void input_modes(RimeSessionId id){
         require(find(menu(id),"你好")>=0,"mode delete/retype failed");
         api->clear_composition(id);
         if(mode.keyboard==5){
+            api->set_option(id,"wetype_wubi_pinyin",false);
             type(id,"wqvbwqvb");std::string text=commit(id);
             require(api->process_key(id,' ',0),"continuous Wubi space failed");text+=commit(id);
             require(text=="你好你好","continuous four-code Wubi failed");
+            api->set_option(id,"wetype_wubi_pinyin",true);
         }
         if(mode.semicolon){
             type(id,"j;");expect_spelling(id,"j;");
@@ -142,29 +145,40 @@ static void input_modes(RimeSessionId id){
 static void surrounding_context(RimeSessionId id){
     require(api->select_schema(id,"wetype_quanpin"),"context test schema unavailable");
     api->set_option(id,"ascii_mode",false);
-    struct Case {RimeSessionId id;const char *source;size_t bytes,reads;};
+    struct Case {RimeSessionId id;const char *source;size_t bytes,reads,after=0,on=0;};
     auto check=[](void *value){
         auto &test=*static_cast<Case *>(value);
         type(test.id,"nihao");
         require(property(test.id,"_wetype_context_source")==test.source,"wrong surrounding-text source");
         require(property(test.id,"_wetype_context_bytes")==std::to_string(test.bytes),"surrounding prefix missing or includes marked text");
+        require(property(test.id,"_wetype_context_after_bytes")==std::to_string(test.after),"surrounding suffix missing or includes marked text");
+        require(property(test.id,"_wetype_context_on_bytes")==std::to_string(test.on),"selection missing or marked text leaked");
         require(find(menu(test.id),"你好")>=0,"context query broke native candidates");
         require(api->process_key(test.id,0xff08,0),"context deletion failed");type(test.id,"o");
         require(imk_fixture_reads()==test.reads,"surrounding text was repeatedly fetched per key");
     };
-    Case chinese{id,"imk",10,1};
+    Case chinese{id,"imk",10,2,6};
     imk_fixture_perform("前文😀ni'hao后文",6,4,6,false,check,&chinese);
     api->clear_composition(id);
-    Case another{id,"imk",9,1};
+    Case another{id,"imk",9,2};
     imk_fixture_perform("另一个",3,size_t(-1),0,false,check,&another);
+    api->clear_composition(id);
+    Case selection{id,"imk",3,3,3,7};
+    imk_fixture_perform("前选😀后",1,size_t(-1),0,false,check,&selection,3);
+    api->clear_composition(id);
+    std::string suffix(300,'y');Case suffix_case{id,"imk",0,1,256};
+    imk_fixture_perform(suffix.c_str(),0,size_t(-1),0,false,check,&suffix_case);
+    api->clear_composition(id);
+    Case oversized{id,"imk",0,1};
+    imk_fixture_perform(suffix.c_str(),0,size_t(-1),0,false,check,&oversized,300);
     api->clear_composition(id);
     Case missing{id,"unavailable",0,0};
     imk_fixture_perform("不提供上下文",0,size_t(-1),0,true,check,&missing);
     api->clear_composition(id);
-    Case empty{id,"imk",0,0};
+    Case empty{id,"imk",0,1};
     imk_fixture_perform("",0,size_t(-1),0,false,check,&empty);
     api->clear_composition(id);
-    std::string long_text(300,'x');Case bounded{id,"imk",256,1};
+    std::string long_text(300,'x');Case bounded{id,"imk",256,2};
     imk_fixture_perform(long_text.c_str(),300,size_t(-1),0,false,check,&bounded);
     api->clear_composition(id);api->set_option(id,"wetype_surrounding",false);
     Case disabled{id,"disabled",0,0};
@@ -236,6 +250,23 @@ int main(int argc,char **argv){
         traits.log_dir=argv[2];traits.min_log_level=2;
         api->setup(&traits);api->initialize(&traits);
         api->start_maintenance(true);api->join_maintenance_thread();
+        {
+            std::unique_ptr<rime::Engine> engine(rime::Engine::Create());
+            engine->ApplySchema(new rime::Schema("wetype_quanpin"));
+            auto config=engine->schema()->config();
+            config->SetString("_wetype_context_t2s/opencc_config","s2t.json");
+            wetype::ContextSimplifier converter;converter.initialise(engine.get());
+            std::string restored;
+            require(config->GetString("_wetype_context_t2s/opencc_config",&restored)&&restored=="s2t.json","context converter altered schema configuration");
+            wetype::SurroundingText text{true,"我喜歡中國😀 OpenAI","後文與臺灣","選中文字"};
+            converter.convert(text);
+            require(text.before=="我喜欢中国😀 OpenAI"&&text.after=="后文与台湾"&&text.on=="选中文字","Rime t2s did not convert every context field");
+            converter.convert(text);
+            require(text.before=="我喜欢中国😀 OpenAI","simplified context changed on repeated conversion");
+            wetype::SurroundingText empty;converter.convert(empty);
+            require(empty.before.empty()&&empty.after.empty()&&empty.on.empty(),"conversion populated empty context");
+            puts("PASS: Rime t2s converts all context fields, preserves emoji/Latin/empty text and restores schema settings");
+        }
         auto id=api->create_session();require(id,"cannot create Rime session");
         require(api->select_schema(id,"wetype"),"cannot select wetype schema");
         api->set_option(id,"ascii_mode",false);

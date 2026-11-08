@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Add persistent candidate pinning, blocking and separate restoration shortcuts, scoped to input layout and code, whilst preserving native selection identities and learning for other candidates. Keep native learned-entry deletion separate from reversible display blocking.
+
+- Enable native Wubi pinyin assistance, remaining-code comments and wildcard code hints by default across all three variants and the unified scheme, with independent live switches and selection feedback. Allow longer pinyin composition while assistance is enabled.
+
+- Convert preceding text, following text and selections to simplified Chinese through Rime's OpenCC t2s before passing context to WeType, independently of candidate-output conversion.
+
+- Extend the existing context option to pass bounded preceding text, following text and selections through the native engine fields, excluding marked composition text. Reuse the same sampling, session isolation and fuzzy-query paths; rename the visible switch to 上下文联想.
+
 - Preserve custom_phrase text through OpenCC using Rime's standard user_table candidate type and excluded_types setting, including both mainland conversion stages and phrases with priority disabled. Ordinary engine output still follows script conversion.
 
 - Fix custom-phrase priority disappearing after deployment when one code falls outside the native input alphabet. Skip those codes individually, preserve the source table and report a local count; cover table edits and redeployment without restarting librime.

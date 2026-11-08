@@ -43,7 +43,7 @@ struct RawCandidate {
     unsigned char tail[68];
 };
 static_assert(sizeof(RawCandidate) == 112);
-struct Candidate { string text, id; uint32_t cover; };
+struct Candidate { string text, id; uint32_t cover; string comment; };
 struct PendingInput {
     string input,display;
     std::vector<size_t> ends{0};
@@ -139,12 +139,12 @@ static string unhex(const string &s) {
 }
 struct Session {
     const InputMode *mode=&input_mode("quanpin");
-    unsigned expressions=0;
+    unsigned expressions=0,wubi=3;
     uint64_t sid=0,generation=0,revision=0,ticket=0,completed=0;
     bool closed=false;
     uint32_t native_version=0;
     bool version_known=false;
-    string input, issued_input,before;
+    string input, issued_input,before,after,on;
     bool context_applied=false;
     PendingInput pending,issued_pending;
     std::vector<Candidate> candidates,issued;
@@ -265,7 +265,9 @@ static void events(uint64_t,const uint32_t *types,void *const *data,uint32_t cou
         while(it && rows.size()<64 && api.next(it,&raw)) {
             uint32_t cover; memcpy(&cover,reinterpret_cast<char *>(&raw)+100,4);
             if(!raw.text||raw.text_len>4095||!raw.id||raw.id_len>4096||!cover)break;
-            rows.push_back({string(raw.text,raw.text_len),string(static_cast<const char *>(raw.id),raw.id_len),cover});
+            string comment;
+            if(raw.comment&&raw.comment_len<=4095)comment.assign(raw.comment,raw.comment_len);
+            rows.push_back({string(raw.text,raw.text_len),string(static_cast<const char *>(raw.id),raw.id_len),cover,std::move(comment)});
         }
         if(it)api.erase_iterator(it);
         auto &s=*l.session;
@@ -283,7 +285,7 @@ static void events(uint64_t,const uint32_t *types,void *const *data,uint32_t cou
 static void reset(Session &s) {
     uint64_t previous;
     { std::lock_guard<std::mutex> lock(s.mu);
-      previous=s.sid; ++s.generation; s.input.clear();s.issued.clear();s.candidates.clear();s.pending={};s.issued_pending={};s.version_known=false;s.before.clear();s.context_applied=false;++s.ticket; }
+      previous=s.sid; ++s.generation; s.input.clear();s.issued.clear();s.candidates.clear();s.pending={};s.issued_pending={};s.version_known=false;s.before.clear();s.after.clear();s.on.clear();s.context_applied=false;++s.ticket; }
     if(previous)api.destroy(previous);
     alignas(8) unsigned char cfg[312]={};
     // The dedicated host already serializes requests. Use the native session
@@ -292,7 +294,7 @@ static void reset(Session &s) {
     cfg[47]=cfg[58]=cfg[60]=cfg[174]=cfg[248]=cfg[308]=1;
     wetype_session_expressions(cfg,s.expressions);
     memcpy(cfg+4,&s.mode->keyboard,4);memcpy(cfg+32,&s.mode->double_pin,4);
-    if(s.mode->keyboard==5)cfg[41]=1; // candidates on; native auto-commit remains off
+    if(s.mode->keyboard==5)wetype_session_wubi(cfg,s.wubi);
     const char *app="WetypeRime";uint32_t len=10;
     memcpy(cfg+192,&app,8);memcpy(cfg+220,&len,4);
     s.sid=api.create(cfg);
@@ -314,12 +316,13 @@ static void wait_batch(Session &s,const Barrier &before,uint32_t mutations=1) {
     }))
         throw std::runtime_error("candidate timeout");
 }
-static void query(Session &s,const string &text,const string &before) {
+static void query(Session &s,const string &text,const string &before,const string &after,const string &on,bool comments=false) {
     if(text.empty()||text.size()>128||text.find_first_not_of("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';")!=string::npos||
        (!s.mode->semicolon&&text.find(';')!=string::npos))
         throw std::runtime_error("invalid input");
-    if(before.size()>1024||before.find('\0')!=string::npos)throw std::runtime_error("invalid context");
-    if(s.context_applied&&s.before!=before)reset(s);
+    for(const auto *field:{&before,&after,&on})
+        if(field->size()>1024||field->find('\0')!=string::npos)throw std::runtime_error("invalid context");
+    if(s.context_applied&&(s.before!=before||s.after!=after||s.on!=on))reset(s);
     if(text.size()<s.input.size()&&s.input.compare(0,text.size(),text)==0){
         auto before=barrier(s);
         // Native C API takes the deletion count. Preserve the current session
@@ -330,9 +333,11 @@ static void query(Session &s,const string &text,const string &before) {
     if(!s.context_applied){
         TextAroundCursor context{};
         context.before=before.data();context.before_len=static_cast<uint32_t>(before.size());
-        context.after=context.on=context.clipboard=context.extra="";
+        context.after=after.data();context.after_len=static_cast<uint32_t>(after.size());
+        context.on=on.data();context.on_len=static_cast<uint32_t>(on.size());
+        context.clipboard=context.extra="";
         api.set_context(s.sid,&context,0);
-        s.before=before;s.context_applied=true;
+        s.before=before;s.after=after;s.on=on;s.context_applied=true;
     }
     size_t start=s.input.size();
     auto key=[&](char ch){
@@ -365,9 +370,12 @@ static void query(Session &s,const string &text,const string &before) {
         s.issued_input=s.input;++s.ticket;
     }
     fprintf(protocol,"RESULT %llu %zu\n",(unsigned long long)s.ticket,s.issued.size());
-    for(size_t i=0;i<s.issued.size();++i)
-        fprintf(protocol,"C %zu %u %s %s\n",i,s.issued[i].cover,hex(s.issued[i].text).c_str(),
+    for(size_t i=0;i<s.issued.size();++i){
+        fprintf(protocol,"C %zu %u %s %s",i,s.issued[i].cover,hex(s.issued[i].text).c_str(),
                 hex(s.issued_pending.prefix(s.issued[i].cover)).c_str());
+        if(comments)fprintf(protocol," %s",hex(s.issued[i].comment).c_str());
+        fprintf(protocol,"\n");
+    }
     fprintf(protocol,"END\n");fflush(protocol);
 }
 static void select(Session &s,uint64_t ticket,size_t index) {
@@ -551,22 +559,30 @@ int main(int argc,char **argv) {
                     throw std::runtime_error("invalid expression options");
                 unsigned expressions=option.empty()?0:static_cast<unsigned>(std::stoul(option));
                 if(expressions>7)throw std::runtime_error("unsupported expression options; Emoji Plus is disabled");
+                string wubi_option;in.clear();in>>wubi_option;
+                if(!wubi_option.empty()&&(wubi_option.size()!=1||wubi_option[0]<'0'||wubi_option[0]>'3'))
+                    throw std::runtime_error("invalid Wubi options");
+                unsigned wubi=wubi_option.empty()?3:static_cast<unsigned>(wubi_option[0]-'0');
                 uint64_t id=prepared_handle;
-                if(id){prepared_handle=0;auto &s=*sessions[id];if(s.mode!=&mode||s.expressions!=expressions){s.mode=&mode;s.expressions=expressions;reset(s);}}
-                else{auto s=std::make_unique<Session>();s->mode=&mode;s->expressions=expressions;reset(*s);id=next_handle++;sessions[id]=std::move(s);}
+                if(id){prepared_handle=0;auto &s=*sessions[id];if(s.mode!=&mode||s.expressions!=expressions||s.wubi!=wubi){s.mode=&mode;s.expressions=expressions;s.wubi=wubi;reset(s);}}
+                else{auto s=std::make_unique<Session>();s->mode=&mode;s->expressions=expressions;s->wubi=wubi;reset(*s);id=next_handle++;sessions[id]=std::move(s);}
                 fprintf(protocol,"OPENED %llu\n",(unsigned long long)id);fflush(protocol);continue;
             }
             if(!(in>>handle)||!sessions.count(handle)||sessions[handle]->closed)throw std::runtime_error("unknown session");
             auto &s=*sessions[handle];
-            if(cmd=="QUERY" && in>>arg){string before;in>>before;query(s,unhex(arg),before.empty()?string():unhex(before));continue;}
+            if(cmd=="QUERY" && in>>arg){string before,after,on,comments;in>>before>>after>>on>>comments;query(s,unhex(arg),before.empty()?string():unhex(before),after.empty()?string():unhex(after),on.empty()?string():unhex(on),comments=="1");continue;}
 #ifdef WETYPE_CONTEXT_TEST
             if(cmd=="CONTEXT_STATUS"){
-                struct Snapshot{bool received=false,matched=false;size_t length=0;string expected;};
-                Snapshot snapshot{};snapshot.expected=s.before;
+                struct Snapshot{bool received=false,matched=false;size_t length=0;string expected,after,on;};
+                Snapshot snapshot{};snapshot.expected=s.before;snapshot.after=s.after;snapshot.on=s.on;
                 api.context_snapshot(s.sid,[](const TextAroundCursor *c,void *p){
                     auto &out=*static_cast<Snapshot *>(p);out.received=true;out.length=c->before_len;
                     out.matched=c->before_len==out.expected.size()&&(!c->before_len||
                         (c->before&&std::memcmp(c->before,out.expected.data(),c->before_len)==0));
+                    out.matched=out.matched&&c->after_len==out.after.size()&&c->on_len==out.on.size()
+                        &&(!c->after_len||(c->after&&std::memcmp(c->after,out.after.data(),c->after_len)==0))
+                        &&(!c->on_len||(c->on&&std::memcmp(c->on,out.on.data(),c->on_len)==0))
+                        &&!c->clipboard_len&&!c->extra_len;
                 },&snapshot);
                 fprintf(protocol,"CONTEXT %d %d %zu\n",snapshot.received,snapshot.matched,snapshot.length);fflush(protocol);continue;
             }

@@ -19,7 +19,8 @@ for line in sys.stdin:
     elif op=='QUERY':
         query+=1
         if query==1:print('RESULT 1 2\\nC 0 4 616263 616263\\nC 1 3 616263 616263\\nEND',flush=True)
-        else:print('RESULT 2 1\\nC 0 5 e4bda0e5a5bd 6e692768616f\\nEND',flush=True)
+        elif query==2:print('RESULT 2 1\\nC 0 5 e4bda0e5a5bd 6e692768616f\\nEND',flush=True)
+        else:print('RESULT 3 1\\nC 0 5 e4bda0e5a5bd 6e692768616f 77717662\\nEND',flush=True)
     else:print('OK',flush=True)
 ''')
     fixture.chmod(0o700)

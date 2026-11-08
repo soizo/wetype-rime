@@ -10,15 +10,22 @@ switches:
   - name: ascii_mode
     reset: 0
     states: [中文, 英文]
+  - name: wetype_wubi_pinyin
+    reset: 1
+    states: [五笔拼音辅助关, 五笔拼音辅助开]
+  - name: wetype_wubi_comment
+    reset: 1
+    states: [五笔编码注释关, 五笔编码注释开]
   - name: wetype_surrounding
     reset: 1
-    states: [前文联想关, 前文联想开]
+    states: [上下文联想关, 上下文联想开]
     abbrev: [前文关, 前文开]
 engine:
   processors:
     - lua_processor@*wetype_bootstrap
     - ascii_composer
     - recognizer
+    - wetype_candidate_actions
     - key_binder
     - wetype_speller
     - punctuator
@@ -58,6 +65,13 @@ ascii_composer:
 
 # 只引用安装器生成的接口路径，不包含引擎、词库或学习数据。
 wetype:
+  candidate_keys:
+    pin: Control+Shift+p
+    block: Control+Shift+b
+    unpin: Control+Shift+r
+    restore: Control+Shift+u
+  wubi_pinyin_option: wetype_wubi_pinyin
+  wubi_comment_option: wetype_wubi_comment
   __include: wetype.runtime:/wetype
   mode: wubi86
   # Native binary cell dictionaries; select identifiers in the scheme patch.

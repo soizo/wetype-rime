@@ -11,5 +11,12 @@ int main(){
             if(config[i]!=expected)throw std::runtime_error("expression options changed an unrelated session field");
         }
     }
+    for(unsigned flags=0;flags<4;++flags){
+        unsigned char config[312]={};wetype_session_wubi(config,flags);
+        for(unsigned i=0;i<sizeof(config);++i){
+            unsigned expected=i==36?bool(flags&1):i==39||i==40?bool(flags&2):i==41?1:0;
+            if(config[i]!=expected)throw std::runtime_error("Wubi options changed an unrelated session field");
+        }
+    }
     puts("PASS: independent local expression flags; Emoji Plus forced off; cloud, WeChat, AI and unrelated fields untouched");
 }

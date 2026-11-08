@@ -31,7 +31,7 @@ static string unhex(const string &s) {
     auto nib=[](char c)->int{if(c>='0'&&c<='9')return c-'0';if(c>='a'&&c<='f')return c-'a'+10;throw std::runtime_error("invalid engine hex");};
     string r;for(size_t i=0;i<s.size();i+=2)r+=char((nib(s[i])<<4)|nib(s[i+1]));return r;
 }
-struct Row{string text;size_t cover,index;string preedit;};
+struct Row{string text;size_t cover,index;string preedit,comment;};
 struct Result{uint64_t ticket;std::vector<Row> rows;};
 class Client {
     pid_t pid=-1;
@@ -122,9 +122,10 @@ public:
             if(pid>0){kill(pid,SIGTERM);waitpid(pid,nullptr,0);pid=-1;}
         }
     }
-    uint64_t open(const string &mode="quanpin",unsigned expressions=0){
+    uint64_t open(const string &mode="quanpin",unsigned expressions=0,unsigned wubi=3){
         if(expressions>7)throw std::runtime_error("unsupported expression options; Emoji Plus is disabled");
-        std::lock_guard<std::mutex> lock(mu);write("OPEN "+mode+(expressions?" "+std::to_string(expressions):""));
+        if(wubi>3)throw std::runtime_error("invalid Wubi options");
+        std::lock_guard<std::mutex> lock(mu);write("OPEN "+mode+" "+std::to_string(expressions)+" "+std::to_string(wubi));
         string s=reply();uint64_t id=0;std::istringstream in(s);string tag;in>>tag>>id;
         if(tag!="OPENED"||!id)throw std::runtime_error("invalid session response");return id;
     }
@@ -164,9 +165,9 @@ public:
     }
     void sync_cells(const std::shared_ptr<const string> &request){std::lock_guard<std::mutex> lock(mu);activate_cells(request);}
     Result query(uint64_t id,const string &text,const string &before={},const std::shared_ptr<const string> &dictionary={},
-                 const std::shared_ptr<const string> &cells={}){
+                 const std::shared_ptr<const string> &cells={},const string &after={},const string &on={}){
         std::lock_guard<std::mutex> lock(mu);activate_lexicon(dictionary);activate_cells(cells);
-        write("QUERY "+std::to_string(id)+" "+hex(text)+" "+hex(before));
+        write("QUERY "+std::to_string(id)+" "+hex(text)+" "+hex(before)+" "+hex(after)+" "+hex(on)+" 1");
         Result result{};size_t count=0;string tag;std::istringstream in(reply());in>>tag>>result.ticket>>count;
         if(tag!="RESULT"||count>64||!result.ticket)transport_error("invalid candidate response");
         // Consume one complete frame before validating its candidate fields.
@@ -178,7 +179,9 @@ public:
             Row row{};string payload,preedit;std::istringstream r(rows[i]);r>>tag>>row.index>>row.cover>>payload>>preedit;
             if(tag!="C"||row.index!=i||!row.cover||row.cover>text.size())throw std::runtime_error("invalid candidate coverage");
             if(!r)throw std::runtime_error("invalid candidate fields");
-            row.text=unhex(payload);row.preedit=unhex(preedit);result.rows.push_back(std::move(row));
+            row.text=unhex(payload);row.preedit=unhex(preedit);
+            string comment;if(r>>comment)row.comment=unhex(comment);
+            result.rows.push_back(std::move(row));
         }
         return result;
     }
