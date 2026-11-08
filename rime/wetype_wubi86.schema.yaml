@@ -1,4 +1,6 @@
-# 可直接编辑的独立方案；修改后运行 python3 -m wetype sync-config 并重新部署。
+# Rime schema
+# encoding: utf-8
+
 schema:
   schema_id: wetype_wubi86
   name: WeTypeRime 86 五笔
@@ -40,9 +42,15 @@ speller:
 punctuator:
   import_preset: default
 key_binder:
+  import_preset: default
   bindings:
     - { when: has_menu, accept: minus, send: Page_Up }
     - { when: has_menu, accept: equal, send: Page_Down }
+recognizer:
+  import_preset: default
+  patterns:
+    # Uppercase input belongs to the native engine.
+    uppercase: ""
 ascii_composer:
   switch_key:
     Shift_L: commit_code
@@ -53,6 +61,8 @@ wetype:
   __include: wetype.runtime:/wetype
   mode: wubi86
 
-# User phrases are parsed by Rime and stored in the native WeType engine.
-wetype_user_words:
-  __include: wetype_user_words:/settings
+# Rime text-table configuration; candidates and learning use WeType.
+custom_phrase:
+  dictionary: ""
+  user_dict: custom_phrase
+  db_class: stabledb

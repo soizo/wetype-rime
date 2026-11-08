@@ -1,5 +1,7 @@
-# Personal WeType user words, read by Rime's stabledb component.
-# Copy to rime/wetype_user_words.txt, edit locally, then sync and redeploy.
+# Rime custom phrases
+# encoding: utf-8
+# Use custom_phrase.txt in your Rime user directory, or the name selected by
+# custom_phrase/user_dict in your scheme's .custom.yaml. Edit and redeploy.
 # Separate fields with a literal Tab: phrase<Tab>input code[<Tab>weight]
 # Codes are literal keystrokes; spaces between syllables are removed.
 # The optional Rime weight is parsed but WeType controls native ranking.

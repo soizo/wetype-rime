@@ -9,7 +9,7 @@
 - `*.dict.yaml`、`*.txt`：你自行添加的 Rime 文字词典、短语表。
 - `lua/`：接口加载器，以及你按需添加的 Lua 扩展。
 
-默认方案只提供原生引擎候选、基本按键和标点，不附带扩展词汇、强制替换、繁简转换过滤器。bin 词库保存在独立引擎目录，用户词汇作为 Rime 侧候选加入，不会改写 bin 文件。
+The schemes use the native engine and dictionaries, inherit Rime’s default key bindings and recogniser patterns, and retain uppercase input for the native engine. Custom phrases use the ordinary `custom_phrase` section and `user_dict` text table; candidates and learning remain native unless an official `table_translator@custom_phrase` is explicitly configured. See [user-word configuration](../docs/user-words.md). Personal changes belong in `<schema_id>.custom.yaml`, followed by Squirrel deployment. Binary resources remain in the independent runtime.
 
 ## 修改与应用
 

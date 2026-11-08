@@ -29,4 +29,4 @@ SKILL.md
 .claude/
 
 # Personal configured words must not be published with the source.
-/rime/wetype_user_words.txt
+/rime/*.txt

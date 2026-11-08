@@ -272,7 +272,10 @@ public:
                 return;
             }
             if(name.rfind("wetype_mode_",0)!=0||!c->get_option(name))return;
-            try{string previous=mode_id;choose_mode();if(previous!=mode_id)c->Clear();}catch(const std::exception &e){error(e);}
+            // Rime filters can refresh a translation before this notification,
+            // so mode_id may already have changed. The option activation still
+            // invalidates the old composition.
+            try{choose_mode();c->Clear();}catch(const std::exception &e){error(e);}
         });
     }
     ~Translator(){lifetime.reset();selected.disconnect();deleted.disconnect();updated.disconnect();option_changed.disconnect();if(host)try{

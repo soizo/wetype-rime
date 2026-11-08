@@ -85,7 +85,7 @@ rime_base=base/'rime'
 stage(rime_base/'user',rime_base/'runtime',copy_engine=False)
 (rime_base/'logs').mkdir()
 (rime_base/'user/default.custom.yaml').write_text('patch:\n  schema_list:\n'+''.join('    - schema: '+schema+'\n' for schema in SCHEMAS))
-(rime_base/'user/wetype_user_words.txt').write_text('# Rime user words\n引擎用户词\twt ri me\t10\n五笔用户词\twu\t5\n禁用用户词\tnegword\t-1\n')
+(rime_base/'user/custom_phrase.txt').write_text('# Rime user words\n引擎用户词\twt ri me\t10\n五笔用户词\twu\t5\n禁用用户词\tnegword\t-1\n')
 binary=ROOT/'build/rime-user-words'
 subprocess.run(['/usr/bin/clang++','-std=c++17','-Wno-missing-field-initializers','-I'+str(DEFAULT_SOURCE/'src'),
                 str(ROOT/'tests/rime_user_words.cpp'),str(SQUIRREL/'Frameworks/librime.1.dylib'),
