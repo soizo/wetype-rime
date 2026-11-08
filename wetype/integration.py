@@ -154,6 +154,12 @@ def stage(rime_dir: Path, runtime: Path, engine: Path = DEFAULT_ENGINE, copy_eng
         path.write_text(launcher);path.chmod(0o755)
         launchers[group] = str(path)
     sync_configs(rime_dir)
+    # These are ordinary personal Rime tables. Install starters once and keep
+    # subsequent edits outside the checkout and untouched during upgrades.
+    for name in ('kaomoji.txt', 'symbol_emoji.txt'):
+        target = rime_dir / name
+        if not target.exists():
+            atomic_copy(ROOT / 'examples/rime-extensions/expressions' / name, target)
     settings = {'module':str(runtime / 'bin' / module_name), 'launcher':launchers['pinyin'],
                 'launchers':launchers, 'log_file':str(state / 'logs/rime.log')}
     # Machine-specific bindings are the only generated YAML. Schemes include

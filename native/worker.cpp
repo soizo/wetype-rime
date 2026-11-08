@@ -139,7 +139,7 @@ static string unhex(const string &s) {
 }
 struct Session {
     const InputMode *mode=&input_mode("quanpin");
-    bool emoji=false;
+    unsigned expressions=0;
     uint64_t sid=0,generation=0,revision=0,ticket=0,completed=0;
     bool closed=false;
     uint32_t native_version=0;
@@ -290,7 +290,7 @@ static void reset(Session &s) {
     // directly, without a second asynchronous input queue inside the engine.
     cfg[1]=1; cfg[9]=cfg[10]=cfg[11]=cfg[12]=1;
     cfg[47]=cfg[58]=cfg[60]=cfg[174]=cfg[248]=cfg[308]=1;
-    wetype_session_emoji(cfg,s.emoji);
+    wetype_session_expressions(cfg,s.expressions);
     memcpy(cfg+4,&s.mode->keyboard,4);memcpy(cfg+32,&s.mode->double_pin,4);
     if(s.mode->keyboard==5)cfg[41]=1; // candidates on; native auto-commit remains off
     const char *app="WetypeRime";uint32_t len=10;
@@ -547,11 +547,13 @@ int main(int argc,char **argv) {
                 const auto &mode=input_mode(arg);
                 if(worker_group!=mode.group)throw std::runtime_error("input mode dictionary mismatch");
                 string option;in.clear();in>>option;
-                if(!option.empty()&&option!="0"&&option!="1")throw std::runtime_error("invalid emoji option");
-                bool emoji=option=="1";
+                if(!option.empty()&&(option.size()>2||option.find_first_not_of("0123456789")!=string::npos))
+                    throw std::runtime_error("invalid expression options");
+                unsigned expressions=option.empty()?0:static_cast<unsigned>(std::stoul(option));
+                if(expressions>7)throw std::runtime_error("unsupported expression options; Emoji Plus is disabled");
                 uint64_t id=prepared_handle;
-                if(id){prepared_handle=0;auto &s=*sessions[id];if(s.mode!=&mode||s.emoji!=emoji){s.mode=&mode;s.emoji=emoji;reset(s);}}
-                else{auto s=std::make_unique<Session>();s->mode=&mode;s->emoji=emoji;reset(*s);id=next_handle++;sessions[id]=std::move(s);}
+                if(id){prepared_handle=0;auto &s=*sessions[id];if(s.mode!=&mode||s.expressions!=expressions){s.mode=&mode;s.expressions=expressions;reset(s);}}
+                else{auto s=std::make_unique<Session>();s->mode=&mode;s->expressions=expressions;reset(*s);id=next_handle++;sessions[id]=std::move(s);}
                 fprintf(protocol,"OPENED %llu\n",(unsigned long long)id);fflush(protocol);continue;
             }
             if(!(in>>handle)||!sessions.count(handle)||sessions[handle]->closed)throw std::runtime_error("unknown session");

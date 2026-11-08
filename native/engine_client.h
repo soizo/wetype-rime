@@ -122,7 +122,12 @@ public:
             if(pid>0){kill(pid,SIGTERM);waitpid(pid,nullptr,0);pid=-1;}
         }
     }
-    uint64_t open(const string &mode="quanpin",bool emoji=false){std::lock_guard<std::mutex> lock(mu);write("OPEN "+mode+(emoji?" 1":" 0"));string s=reply();uint64_t id=0;std::istringstream in(s);string tag;in>>tag>>id;if(tag!="OPENED"||!id)throw std::runtime_error("invalid session response");return id;}
+    uint64_t open(const string &mode="quanpin",unsigned expressions=0){
+        if(expressions>7)throw std::runtime_error("unsupported expression options; Emoji Plus is disabled");
+        std::lock_guard<std::mutex> lock(mu);write("OPEN "+mode+(expressions?" "+std::to_string(expressions):""));
+        string s=reply();uint64_t id=0;std::istringstream in(s);string tag;in>>tag>>id;
+        if(tag!="OPENED"||!id)throw std::runtime_error("invalid session response");return id;
+    }
     void command(const string &s){std::lock_guard<std::mutex> lock(mu);write(s);if(reply()!="OK")throw std::runtime_error("invalid engine acknowledgement");}
     void sync_words(const string &source,const std::vector<std::pair<string,string>> &entries){
         if(source.empty())return;

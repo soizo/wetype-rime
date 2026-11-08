@@ -23,6 +23,7 @@
 #include "rime_user_words.h"
 #include "rime_lexicon.h"
 #include "cell_dicts.h"
+#include "session_options.h"
 namespace wetype {
 static const InputMode &selected_mode(rime::Engine *engine){
     string fixed;engine->schema()->config()->GetString("wetype/mode",&fixed);
@@ -51,6 +52,20 @@ public:
                 ctx->ConfirmCurrentSelection();
         }
         return speller->ProcessKeyEvent(key);
+    }
+};
+// Keep Rime's table format, lookup, priority and commit handling. This wrapper
+// only gates an official table translator with the matching expression option.
+class ExpressionTableTranslator:public rime::Translator {
+    std::unique_ptr<rime::Translator> table;
+    string option;
+public:
+    explicit ExpressionTableTranslator(const rime::Ticket &ticket):rime::Translator(ticket),
+        table(rime::Translator::Require("table_translator")->Create(ticket)){
+        engine_->schema()->config()->GetString(ticket.name_space+"/option_name",&option);
+    }
+    rime::an<rime::Translation> Query(const string &input,const rime::Segment &segment) override{
+        return !option.empty()&&engine_->context()->get_option(option)?table->Query(input,segment):nullptr;
     }
 };
 using Preparing=std::shared_future<std::shared_ptr<Client>>;
@@ -90,7 +105,7 @@ class Translator:public rime::Translator {
     uint64_t session=0;
     rime::connection selected,updated,option_changed,deleted;
     bool active=false;
-    bool emoji_enabled=false;
+    unsigned expression_flags=0;
     bool fuzzy_enabled=false;
     RimeFuzzy fuzzy;
     std::vector<uint64_t> fuzzy_sessions;
@@ -110,10 +125,15 @@ class Translator:public rime::Translator {
     string logged_context_source;
     bool context_sampled=false;
     std::shared_ptr<int> lifetime=std::make_shared<int>(0);
-    bool requested_emoji() const {
+    bool expression_option(const char *key) const {
         string option;
-        return engine_->schema()->config()->GetString("wetype/emoji_option",&option)
+        return engine_->schema()->config()->GetString(key,&option)
             &&!option.empty()&&engine_->context()->get_option(option);
+    }
+    unsigned requested_expressions() const {
+        return (expression_option("wetype/emoji_option")?WETYPE_UNICODE_EMOJI:0)
+            |(expression_option("wetype/kaomoji_option")?WETYPE_KAOMOJI:0)
+            |(expression_option("wetype/symbol_emoji_option")?WETYPE_SYMBOL_EMOJI:0);
     }
     bool requested_fuzzy() const {
         string option;
@@ -122,9 +142,9 @@ class Translator:public rime::Translator {
     }
     void choose_mode(){
         const auto &mode=selected_mode(engine_);
-        bool emoji=requested_emoji();
+        unsigned expressions=requested_expressions();
         bool use_fuzzy=requested_fuzzy();
-        if(mode_id==mode.id&&emoji_enabled==emoji&&fuzzy_enabled==use_fuzzy)return;
+        if(mode_id==mode.id&&expression_flags==expressions&&fuzzy_enabled==use_fuzzy)return;
         string path;
         auto config=engine_->schema()->config();
         if(!config->GetString(string("wetype/launchers/")+mode.group,&path))
@@ -137,7 +157,7 @@ class Translator:public rime::Translator {
         bool changed_host=path!=launcher;
         if(changed_host){host.reset();preparing={};words_preparing={};lexicon_preparing={};cells_preparing={};launcher=path;}
         mode_id=mode.id;
-        emoji_enabled=emoji;
+        expression_flags=expressions;
         fuzzy_enabled=use_fuzzy;
         try{
             if(fuzzy_enabled)fuzzy.load(config,mode_id);
@@ -162,6 +182,7 @@ class Translator:public rime::Translator {
             cells_preparing=std::async(std::launch::async,[pending,request]{pending.get()->sync_cells(request);}).share();
         }
         engine_->context()->set_property("_wetype_mode",mode_id);
+        engine_->context()->set_property("_wetype_expression_flags",std::to_string(expression_flags));
     }
     void ensure(){
         choose_mode();if(!host)host=preparing.get();
@@ -181,7 +202,7 @@ class Translator:public rime::Translator {
                 engine_->context()->set_property("_wetype_cell_dicts_error",e.what());cells_request.reset();
             }
         }
-        if(!session)session=host->open(mode_id,emoji_enabled);
+        if(!session)session=host->open(mode_id,expression_flags);
     }
     void error(const std::exception &e){
         string path;if(engine_->schema()->config()->GetString("wetype/log_file",&path))
@@ -246,7 +267,7 @@ class Translator:public rime::Translator {
             ctx->set_property("_wetype_fuzzy_variants",std::to_string(variants.size()));
             for(size_t i=0;i<variants.size();++i){
                 try{
-                    if(i>=fuzzy_sessions.size())fuzzy_sessions.push_back(host->open("quanpin",emoji_enabled));
+                    if(i>=fuzzy_sessions.size())fuzzy_sessions.push_back(host->open("quanpin",expression_flags));
                     auto alternative=host->query(fuzzy_sessions[i],variants[i],before_text,dictionary_request,cells_request);
                     size_t count=0;
                     for(auto row:alternative.rows){
@@ -339,10 +360,12 @@ public:
                 try{choose_mode();c->Clear();}catch(const std::exception &e){error(e);}
                 return;
             }
-            string emoji_option;
-            if(engine_->schema()->config()->GetString("wetype/emoji_option",&emoji_option)&&name==emoji_option){
-                try{choose_mode();c->Clear();}catch(const std::exception &e){error(e);}
-                return;
+            for(const char *key:{"wetype/emoji_option","wetype/kaomoji_option","wetype/symbol_emoji_option"}){
+                string option;
+                if(engine_->schema()->config()->GetString(key,&option)&&name==option){
+                    try{choose_mode();c->Clear();}catch(const std::exception &e){error(e);}
+                    return;
+                }
             }
             if(name=="wetype_surrounding"){
                 before_text.clear();context_sampled=false;
@@ -374,6 +397,7 @@ static void rime_wetype_initialize(){
     wetype::install_imk_context();
     rime::Registry::instance().Register("wetype_translator",new rime::Component<wetype::Translator>);
     rime::Registry::instance().Register("wetype_speller",new rime::Component<wetype::ModeSpeller>);
+    rime::Registry::instance().Register("wetype_expression_translator",new rime::Component<wetype::ExpressionTableTranslator>);
 }
 static void rime_wetype_finalize(){std::lock_guard<std::mutex> lock(wetype::clients_mu);wetype::clients.clear();}
 RIME_REGISTER_MODULE(wetype)

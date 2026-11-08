@@ -128,6 +128,8 @@ The optional [`WeType小鹤大陆` variant](rime/wetype_flypy_gov.schema.yaml) i
 
 Optional fuzzy spelling uses Rime's own `speller/algebra` through the adapter, with editable rules in [`rime/wetype_fuzzy.yaml`](rime/wetype_fuzzy.yaml); WeType's fuzzy options stay disabled. Full pinyin and Xiaohe are supported, with `in / ing` as the initial rules. The mainland Xiaohe variant enables this by default and exposes an on/off switch. Other base schemes can opt in using the [fuzzy example](examples/rime-extensions/fuzzy/wetype.custom.yaml). See the [configuration guide](rime/README.md#rime-模糊音) for input and candidate limits.
 
+[Local expressions](docs/expressions.md) add independent native kaomoji and symbol recommendations, with editable Rime `kaomoji.txt` and `symbol_emoji.txt` tables. Both new expression switches start disabled. Emoji Plus is prohibited: its switch is absent, activation requests are rejected and its native flag is forced off.
+
 [Bundled native cell dictionaries](docs/native-cell-dictionaries.md) are also supported and disabled by default. Select local packs through `wetype/cell_dicts` in the scheme's `.custom.yaml`, then deploy. The current engine supplies `cell_dict.sc`, `cell_dict.ssrc` and `cell_dict.hf`; the native engine loads their original binary resources and handles ranking. Set the list to `[]` to disable them.
 
 [Optional dictionaries](docs/dictionaries.md) use ordinary Rime `*.dict.yaml` files and `import_tables`, with matching, initial weight ranking and learning handled by WeType. They are disabled by default. Installation supplies empty `wetype.dict.yaml` and `custom.dict.yaml` starters; enable them with `translator/dictionary: wetype` in a normal scheme patch. Existing personal dictionary files are preserved on upgrade.

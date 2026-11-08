@@ -56,3 +56,14 @@ by the validated macOS engine. Keep only the identifiers you want, or set
 uses WeType's original binary loading interface. It is independent of the
 ordinary Rime vocabulary example above. See the
 [native cell guide](../../docs/native-cell-dictionaries.md).
+
+## Local kaomoji and symbol expressions
+
+Merge `expressions/wetype.custom.yaml` into the target scheme's normal patch and
+deploy. It adds independent kaomoji and symbol options, both disabled initially.
+Installation supplies `kaomoji.txt` and `symbol_emoji.txt` starter tables without
+replacing existing files. Add personal
+literal expressions with ordinary Rime text-table rows and deploy. Native
+recommendations use WeType; personal rows use Rime's official table translator.
+See the [expression guide](../../docs/expressions.md). Emoji Plus is prohibited
+and cannot be enabled through a scheme patch.

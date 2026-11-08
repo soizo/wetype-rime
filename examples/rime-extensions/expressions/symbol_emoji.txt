@@ -1,0 +1,4 @@
+# Personal text symbols: text<TAB>literal input code<TAB>optional weight.
+# Uncomment an example or add your own entries, then deploy in Squirrel.
+# ☆彡	mystar	100
+# →→→	myarrow	100

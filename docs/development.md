@@ -52,7 +52,7 @@ The checks cover real candidates, selection feedback, partial selection, persist
 
 `python3 tests/smoke_config.py --feature mainland` tests the optional `wetype_flypy_gov` scheme, including Xiaohe input, left-Shift script switching, right-Shift punctuation and full-width space. It copies the existing user's OpenCC resources into its isolated fixture; those resources are not distributed by this project.
 
-`python3 tests/smoke_config.py --feature native-emoji` tests native engine Emoji ranking, numeric selection, feedback, composition invalidation and on/off/on switching. Mainland checks exercise the same behavior in Xiaohe mode. `native/session_options.h` records the validated Mac 3.0.1 session metadata: local normal-Emoji recommendation at byte 45 and local normal-Emoji input at byte 52. The worker pipe accepts `OPEN <mode> [0|1]`; omitted means disabled. Rime reads the option named by `wetype/emoji_option`, closes the old session and opens a new one when it changes. Raw candidates retain native selection IDs and coverage. New ABI layouts require separate verification; this is Unicode Emoji support, not cloud sticker retrieval or WeChat-internal emoticon rendering.
+`python3 tests/smoke_config.py --feature native-emoji` tests native engine Emoji ranking, numeric selection, feedback, composition invalidation and on/off/on switching. Mainland checks exercise the same behavior in Xiaohe mode. `native/session_options.h` records the validated Mac 3.0.1 session metadata: local normal-Emoji recommendation at byte 45 and local normal-Emoji input at byte 52. The worker pipe accepts `OPEN <mode> [flags]`; omitted or zero means disabled. The mask retains 1 for Unicode Emoji and adds 2 for kaomoji and 4 for text symbols. Both the client and worker reject masks outside 0–7. The native Emoji Plus flag at byte 54 is always cleared, including when the configuration helper receives stale flags. Rime reads the option named by `wetype/emoji_option`, closes the old session and opens a new one when it changes. Raw candidates retain native selection IDs and coverage. New ABI layouts require separate verification; this is Unicode Emoji support, not cloud sticker retrieval or WeChat-internal emoticon rendering.
 
 For paced input and held-delete measurements, add `--timing` to `smoke_rime.py`. Background model loading can change latency, so report the test duration and model state when comparing results.
 
@@ -79,3 +79,12 @@ Incompatible text-table codes are isolated before batching, rather than rejectin
 The engine and dependent frameworks are copied from a local WeType application. The executable copy is converted into a loadable bundle; algorithm code and model data are not patched. The original application's directory is denied during worker execution.
 
 Preceding text is sampled once per composition through the current IMK client, excluding marked text, with a maximum request of 256 UTF-16 units. Unsupported clients and secure input fall back to ordinary input. This bridge is specific to the validated Squirrel implementation and needs review when that frontend changes.
+
+`python3 tests/smoke_expressions.py` validates independent local expression flags,
+native candidate feedback and double pinyin, then exercises Rime's official
+personal-table backend, literal output, editing, deployment and live option
+changes. `tests/session_options.cpp` verifies that all supported masks leave
+unrelated, cloud, WeChat and AI configuration fields untouched, and that stale
+Plus masks cannot set the native Plus flag. Worker tests reject those masks;
+Rime tests confirm that obsolete Plus bindings cannot reactivate it. The
+[expression guide](expressions.md) documents the supported features.

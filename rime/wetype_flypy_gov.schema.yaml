@@ -6,60 +6,63 @@ schema:
   name: WeType小鹤大陆
   version: "0.1.gov"
   description: WeType 原生小鹤双拼，大陆繁体字形、简繁切换与右 Shift 标点
+# Apply the scheme settings first, then the normal personal Rime patch.
 __patch:
-  "engine/processors/@before 0": lua_processor@*wetype_gov_keys
-  switches:
-    - name: ascii_mode
-      states: [中, Ａ]
-    - name: ascii_punct
-      states: [¥, $]
-    - name: traditionalization
-      states: [简, 繁]
-    - name: emoji
-      states: [💀, 😄]
-      reset: 1
-    - name: full_shape
-      states: [半角, 全角]
-    - name: wetype_surrounding
-      reset: 1
-      states: [前文联想关, 前文联想开]
-    - name: wetype_fuzzy
-      reset: 1
-      states: [精准音, 模糊音]
-  wetype/fuzzy_option: wetype_fuzzy
-  wetype_fuzzy:
-    __include: wetype_fuzzy:/settings
-  speller/algebra:
-    __include: wetype_fuzzy:/algebra
-  engine/filters:
-    - simplifier@traditionalize
-    - simplifier@gov_traditional
-    - uniquifier
-  # Emoji 候选直接由 WeType 本地引擎提供，保留原生排序与选词反馈。
-  wetype/emoji_option: emoji
-  traditionalize:
-    option_name: traditionalization
-    opencc_config: s2t.json
-    tips: none
-    tags: [abc]
-    excluded_types: [user_table]
-  gov_traditional:
-    option_name: traditionalization
-    opencc_config: govrime_t2gov_keep_simp.json
-    tips: none
-    tags: [abc]
-    excluded_types: [user_table]
-  # 沿用当前 Rime 的标点配置（包括个人 default.custom.yaml 中的修改）。
-  punctuator:
-    __include: default:/punctuator
-  key_binder:
-    import_preset: default
-    bindings:
-      - { when: always, accept: Shift_L, toggle: traditionalization }
-      - { when: has_menu, accept: minus, send: Page_Up }
-      - { when: has_menu, accept: equal, send: Page_Down }
-  ascii_composer:
-    __include: default:/ascii_composer
-    switch_key:
-      Shift_L: noop
-      Shift_R: noop
+  -
+    "engine/processors/@before 0": lua_processor@*wetype_gov_keys
+    switches:
+      - name: ascii_mode
+        states: [中, Ａ]
+      - name: ascii_punct
+        states: [¥, $]
+      - name: traditionalization
+        states: [简, 繁]
+      - name: emoji
+        states: [💀, 😄]
+        reset: 1
+      - name: full_shape
+        states: [半角, 全角]
+      - name: wetype_surrounding
+        reset: 1
+        states: [前文联想关, 前文联想开]
+      - name: wetype_fuzzy
+        reset: 1
+        states: [精准音, 模糊音]
+    wetype/fuzzy_option: wetype_fuzzy
+    wetype_fuzzy:
+      __include: wetype_fuzzy:/settings
+    speller/algebra:
+      __include: wetype_fuzzy:/algebra
+    engine/filters:
+      - simplifier@traditionalize
+      - simplifier@gov_traditional
+      - uniquifier
+    # Emoji 候选直接由 WeType 本地引擎提供，保留原生排序与选词反馈。
+    wetype/emoji_option: emoji
+    traditionalize:
+      option_name: traditionalization
+      opencc_config: s2t.json
+      tips: none
+      tags: [abc]
+      excluded_types: [user_table]
+    gov_traditional:
+      option_name: traditionalization
+      opencc_config: govrime_t2gov_keep_simp.json
+      tips: none
+      tags: [abc]
+      excluded_types: [user_table]
+    # 沿用当前 Rime 的标点配置（包括个人 default.custom.yaml 中的修改）。
+    punctuator:
+      __include: default:/punctuator
+    key_binder:
+      import_preset: default
+      bindings:
+        - { when: always, accept: Shift_L, toggle: traditionalization }
+        - { when: has_menu, accept: minus, send: Page_Up }
+        - { when: has_menu, accept: equal, send: Page_Down }
+    ascii_composer:
+      __include: default:/ascii_composer
+      switch_key:
+        Shift_L: noop
+        Shift_R: noop
+  - wetype_flypy_gov.custom:/patch?

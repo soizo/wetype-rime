@@ -1,0 +1,4 @@
+# Personal kaomoji: text<TAB>literal input code<TAB>optional weight.
+# Uncomment an example or add your own entries, then deploy in Squirrel.
+# (｡･ω･｡)ﾉ♡	mykao	100
+# (๑•̀ㅂ•́)و✧	mykao	50

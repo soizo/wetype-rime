@@ -75,3 +75,15 @@ supplies `cell_dict.sc`, `cell_dict.ssrc` and `cell_dict.hf`. Merge the
 into the relevant patch and deploy; replace the list with `[]` to disable them.
 The native engine loads and ranks these resources locally. See the
 [cell dictionary guide](../docs/native-cell-dictionaries.md) for details.
+
+## Local expressions
+
+The [expression example](../examples/rime-extensions/expressions/wetype.custom.yaml)
+adds native kaomoji and symbol options. Both start disabled and use independent
+Rime switches. Add personal entries to the installed `kaomoji.txt` and
+`symbol_emoji.txt` files using Rime's
+ordinary text-table format, then deploy. Existing tables are preserved during
+installation. The personal candidates use the official Rime table backend and
+retain the standard `user_table` type for literal OpenCC exclusions. See the
+[expression guide](../docs/expressions.md) for syntax. Emoji Plus is prohibited;
+there is no switch or supported binding to enable it.
