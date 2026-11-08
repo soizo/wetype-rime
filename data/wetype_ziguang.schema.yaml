@@ -12,10 +12,6 @@ switches:
   - name: ascii_mode
     reset: 0
     states: [中文, 英文]
-  - name: wetype_surrounding
-    reset: 1
-    states: [独立, 联想]
-    abbrev: [独立, 联想]
 wetype:
   __include: wetype_common:/settings
   mode: ziguang

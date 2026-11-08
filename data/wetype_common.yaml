@@ -58,6 +58,9 @@ base:
 
 settings:
   __include: wetype/installation:/wetype
+  # Editor context: true = 聯想 (联想), false = 獨立 (独立).
+  # Set settings/surrounding in wetype_common.custom.yaml, then deploy.
+  surrounding: true
   candidate_keys:
     pin: Control+Shift+p
     block: Control+Shift+b

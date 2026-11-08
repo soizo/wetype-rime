@@ -8,4 +8,3 @@ patch:
   "switches/@next":
     name: wetype_fuzzy
     reset: 1
-    states: [精准音, 模糊音]

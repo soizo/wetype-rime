@@ -73,7 +73,12 @@ static void select_mode(RimeSessionId id,const std::string &mode){
 static std::vector<std::string> all_menu(RimeSessionId id){
     std::vector<std::string> rows;RimeCandidateListIterator it{};
     if(api->candidate_list_begin(id,&it)){
-        while(api->candidate_list_next(&it))rows.emplace_back(it.candidate.text);
+        while(api->candidate_list_next(&it)){
+            std::string text=it.candidate.text;
+            for(const char *hidden:{"联想","独立","精准音","模糊音","颜文字","符号表情","拼音辅助","纯五笔","隐码","显码"})
+                require(text.find(hidden)==std::string::npos,"configuration preference is still exposed in the options menu");
+            rows.push_back(text);
+        }
         api->candidate_list_end(&it);
     }
     return rows;
@@ -143,7 +148,8 @@ static void input_modes(RimeSessionId id){
     puts("PASS: unified options and all 11 standalone engine modes, decoding, selection, deletion, semicolon and live switching");
 }
 static void surrounding_context(RimeSessionId id){
-    require(api->select_schema(id,"wetype_quanpin"),"context test schema unavailable");
+    require(api->select_schema(id,"wetype"),"context test schema unavailable");
+    select_mode(id,"quanpin");
     api->set_option(id,"ascii_mode",false);
     struct Case {RimeSessionId id;const char *source;size_t bytes,reads,after=0,on=0;};
     auto check=[](void *value){
@@ -180,14 +186,18 @@ static void surrounding_context(RimeSessionId id){
     api->clear_composition(id);
     std::string long_text(300,'x');Case bounded{id,"imk",256,2};
     imk_fixture_perform(long_text.c_str(),300,size_t(-1),0,false,check,&bounded);
-    api->clear_composition(id);api->set_option(id,"wetype_surrounding",false);
+    api->clear_composition(id);
+    require(api->select_schema(id,"wetype_quanpin"),"independent context schema unavailable");
+    api->set_option(id,"ascii_mode",false);
     Case disabled{id,"disabled",0,0};
     imk_fixture_perform("不应读取",4,size_t(-1),0,false,check,&disabled);
-    api->clear_composition(id);api->set_option(id,"wetype_surrounding",true);
+    api->clear_composition(id);
+    require(api->select_schema(id,"wetype"),"cannot restore context-enabled schema");
+    select_mode(id,"quanpin");api->set_option(id,"ascii_mode",false);
     // Outside an input event, no previous client may remain visible.
     type(id,"nihao");require(property(id,"_wetype_context_source")=="unavailable","IMK client leaked outside its event");
     api->clear_composition(id);
-    puts("PASS: IMK prefix, marked-text exclusion, emoji, bounded reads, unavailable clients, opt-out and event lifetime");
+    puts("PASS: IMK prefix, marked-text exclusion, emoji, bounded reads, unavailable clients, file-configured opt-out and event lifetime");
 }
 static void timing(RimeSessionId id){
     using Clock=std::chrono::steady_clock;

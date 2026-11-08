@@ -6,10 +6,8 @@ patch:
   "switches/+":
     - name: kaomoji
       reset: 1
-      states: [颜文字关, 颜文字开]
     - name: symbol_emoji
       reset: 1
-      states: [符号表情关, 符号表情开]
   "engine/translators/+":
     - wetype_expression_translator@kaomoji
     - wetype_expression_translator@symbol_emoji

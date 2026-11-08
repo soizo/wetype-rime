@@ -30,6 +30,8 @@ if args.user_profile:
     for name in ('lua','opencc','cn_dicts','en_dicts','build'):
         if (source/name).is_dir():shutil.copytree(source/name,user/name)
 stage(user,runtime,copy_engine=False)
+# Exercise a file-only opt-out alongside the enabled shared default.
+(user/'wetype_quanpin.custom.yaml').write_text('patch:\n  wetype/surrounding: false\n')
 if args.user_profile:register_scheme(user, SCHEMAS)
 else:(user/'default.custom.yaml').write_text('patch:\n  schema_list:\n'+''.join('    - schema: '+schema+'\n' for schema in SCHEMAS)+SAVE_OPTIONS_PATCH)
 logs.mkdir()

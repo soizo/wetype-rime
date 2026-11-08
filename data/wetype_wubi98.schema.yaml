@@ -14,14 +14,8 @@ switches:
     states: [中文, 英文]
   - name: wetype_wubi_pinyin
     reset: 1
-    states: [纯五笔, 拼音辅助]
   - name: wetype_wubi_comment
     reset: 1
-    states: [隐码, 显码]
-  - name: wetype_surrounding
-    reset: 1
-    states: [独立, 联想]
-    abbrev: [独立, 联想]
 wetype:
   __include: wetype_common:/settings
   mode: wubi98

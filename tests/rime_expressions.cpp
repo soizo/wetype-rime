@@ -30,7 +30,17 @@ int main(int argc,char **argv){
   const char *schema=argc==4?argv[3]:"wetype";bool flypy=std::string(schema).find("flypy")!=std::string::npos;
   const char *happy=flypy?"kdxb":"kaixin",*stars=flypy?"xkxk":"xingxing",*hello=flypy?"nihc":"nihao";
   auto session=[&]{auto id=api->create_session();require(api->select_schema(id,schema),"scheme unavailable");api->set_option(id,"ascii_mode",false);api->set_option(id,"traditionalization",false);api->set_option(id,"emoji",false);return id;};
-  auto id=session();require(contains(rows(id,happy),"开心(*^▽^*)"),"kaomoji not enabled by default");
+  auto id=session();
+  require(api->process_key(id,0xffc1,0),"options menu did not open");
+  RimeCandidateListIterator options{};
+  require(api->candidate_list_begin(id,&options),"options menu unavailable");
+  while(api->candidate_list_next(&options)){
+    std::string label=options.candidate.text;
+    for(const char *hidden:{"颜文字","符号表情","精准音","模糊音","拼音辅助","显码"})
+      require(label.find(hidden)==std::string::npos,"hidden preference leaked into the options menu");
+  }
+  api->candidate_list_end(&options);api->process_key(id,0xff1b,0);
+  require(contains(rows(id,happy),"开心(*^▽^*)"),"kaomoji not enabled by default");
   require(contains(rows(id,stars),"☆"),"symbols not enabled by default");
   require(property(id,"_wetype_expression_flags")=="6","wrong default expression flags");
   api->set_option(id,"kaomoji",false);api->set_option(id,"symbol_emoji",false);

@@ -14,14 +14,8 @@ switches:
     states: [中文, 英文]
   - name: wetype_wubi_pinyin
     reset: 1
-    states: [纯五笔, 拼音辅助]
   - name: wetype_wubi_comment
     reset: 1
-    states: [隐码, 显码]
-  - name: wetype_surrounding
-    reset: 1
-    states: [独立, 联想]
-    abbrev: [独立, 联想]
   - options: ["wetype_mode_quanpin", "wetype_mode_flypy", "wetype_mode_natural", "wetype_mode_microsoft", "wetype_mode_sogou", "wetype_mode_ziguang", "wetype_mode_abc", "wetype_mode_jiajia", "wetype_mode_wubi86", "wetype_mode_wubi98", "wetype_mode_wubi_new"]
     states: ["全拼", "小鹤双拼", "自然码双拼", "微软双拼", "搜狗双拼", "紫光双拼", "智能 ABC 双拼", "拼音加加双拼", "86 五笔", "98 五笔", "新世纪五笔"]
     abbrev: ["全拼", "小鹤", "自然码", "微软", "搜狗", "紫光", "智能 ABC", "拼音加加", "86 五笔", "98 五笔", "新世纪五笔"]

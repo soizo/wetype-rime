@@ -153,6 +153,7 @@ class Translator:public rime::Translator {
     ContextSimplifier context_simplifier;
     string logged_context_source;
     bool context_sampled=false;
+    bool surrounding_enabled=true;
     std::shared_ptr<int> lifetime=std::make_shared<int>(0);
     bool expression_option(const char *key) const {
         string option;
@@ -250,7 +251,7 @@ class Translator:public rime::Translator {
             ensure();
             auto ctx=engine_->context();
             if(!context_sampled){
-                if(ctx->get_option("wetype_surrounding")){
+                if(surrounding_enabled){
                     text_context=surrounding_text();
                     ctx->set_property("_wetype_context_source",text_context.available?"imk":"unavailable");
                     if(text_context.available)try{
@@ -348,6 +349,7 @@ public:
         // Only pipe/worker startup runs in the background; all Rime objects and
         // candidate/context operations remain on the frontend's own thread.
         auto ctx=engine_->context();
+        engine_->schema()->config()->GetBool("wetype/surrounding",&surrounding_enabled);
         try{context_simplifier.initialise(engine_);}
         catch(const std::exception &e){ctx->set_property("_wetype_context_error",e.what());}
         try{user_words.load(engine_->schema()->config());words_valid=true;ctx->set_property("_wetype_user_words_error","");}
@@ -431,11 +433,6 @@ public:
                     try{choose_mode();c->Clear();}catch(const std::exception &e){error(e);}
                     return;
                 }
-            }
-            if(name=="wetype_surrounding"){
-                text_context={};context_sampled=false;
-                if(active)c->Clear();
-                return;
             }
             if(name.rfind("wetype_mode_",0)!=0||!c->get_option(name))return;
             // Rime filters can refresh a translation before this notification,
