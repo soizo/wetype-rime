@@ -14,6 +14,9 @@
 #include <string>
 #include <vector>
 #include <map>
+#include <iomanip>
+#include <memory>
+#include "lexicon_entry.h"
 extern char **environ;
 namespace wetype {
 using std::string;
@@ -36,6 +39,7 @@ class Client {
     string buffered;
     std::mutex mu;
     std::map<string,string> word_sources;
+    std::shared_ptr<const string> active_lexicon;
     bool broken=false;
     [[noreturn]] void transport_error(const char *message){broken=true;throw std::runtime_error(message);}
     void write(const string &message) {
@@ -74,6 +78,13 @@ class Client {
         }
     }
     string reply(int timeout=6000){string s=line(timeout);if(s.rfind("ERROR ",0)==0)throw std::runtime_error(unhex(s.substr(6)));return s;}
+    void activate_lexicon(const std::shared_ptr<const string> &request){
+        if(!request||active_lexicon==request)return;
+        if(!active_lexicon||*active_lexicon!=*request){
+            write(*request);if(reply(30000)!="OK")throw std::runtime_error("invalid dictionary acknowledgement");
+        }
+        active_lexicon=request;
+    }
 public:
     explicit Client(const string &launcher) {
         int a[2],b[2];if(pipe(a))throw std::runtime_error("pipe failed");
@@ -123,8 +134,17 @@ public:
         write(request);if(reply(30000)!="OK")throw std::runtime_error("invalid user-word acknowledgement");
         word_sources[source]=std::move(request);
     }
-    Result query(uint64_t id,const string &text,const string &before={}){
-        std::lock_guard<std::mutex> lock(mu);write("QUERY "+std::to_string(id)+" "+hex(text)+" "+hex(before));
+    static std::shared_ptr<const string> lexicon_message(const std::vector<LexiconEntry> &entries){
+        if(entries.size()>10000)throw std::runtime_error("oversized dictionary configuration");
+        std::ostringstream request;request<<std::setprecision(17)<<"LEXICON_SYNC "<<entries.size();
+        for(const auto &entry:entries)request<<"\nL "<<hex(entry.code)<<' '<<hex(entry.text)<<' '<<entry.weight;
+        request<<"\nEND_LEXICON";auto message=request.str();
+        if(message.size()>5*1024*1024)throw std::runtime_error("oversized dictionary configuration");
+        return std::make_shared<const string>(std::move(message));
+    }
+    void sync_lexicon(const std::shared_ptr<const string> &request){std::lock_guard<std::mutex> lock(mu);activate_lexicon(request);}
+    Result query(uint64_t id,const string &text,const string &before={},const std::shared_ptr<const string> &dictionary={}){
+        std::lock_guard<std::mutex> lock(mu);activate_lexicon(dictionary);write("QUERY "+std::to_string(id)+" "+hex(text)+" "+hex(before));
         Result result{};size_t count=0;string tag;std::istringstream in(reply());in>>tag>>result.ticket>>count;
         if(tag!="RESULT"||count>64||!result.ticket)transport_error("invalid candidate response");
         // Consume one complete frame before validating its candidate fields.

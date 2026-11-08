@@ -1,0 +1,10 @@
+# Personal vocabulary starter. Existing files are preserved during upgrades.
+---
+name: wetype_extra
+version: "1.0"
+sort: by_weight
+use_preset_vocabulary: false
+...
+# Remove the leading # to enable a row; fields use literal tabs.
+# 细胞词库	xi bao ci ku	100
+# 专业术语	zhuan ye shu yu	200

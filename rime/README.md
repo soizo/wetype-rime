@@ -52,3 +52,15 @@ WeType小鹤大陆默认开启，方案菜单可切换“精准音 / 模糊音�
 适配器使用 librime 的拼写运算派生拼音，再由 WeType 提供候选，不启用 WeType 的模糊音字段。小鹤先做拼音模糊派生，再映射到双拼编码，所以输入 `qb`（qin）也可出现 `qing` 的“请”等候选，注释为“模糊”。原输入前三个候选保留，模糊候选随后插入并去重；选词反馈仍送回对应的原生引擎会话。
 
 当前只对完整音节组成、32 字符以内的小写输入补充候选，每条路径最多两个模糊音节、最多三个扩展拼写。模糊分支只提供覆盖整个输入的候选；原路径仍支持部分选词。含大写的输入、无法被音节表完整识别的输入、长输入及不支持的布局继续使用原生路径。切换开关会清空正在输入的组合。首次升级需安装新的接口，之后修改规则只需同步配置并重新部署。
+
+## Optional dictionaries
+
+Ordinary `*.dict.yaml` vocabulary and `import_tables` are supported through
+`translator/dictionary`, which is null by default. The installed
+`wetype.dict.yaml` and `wetype_extra.dict.yaml` are empty starter files. Merge
+`translator/dictionary: wetype` into the target scheme's `.custom.yaml`, add
+full-pinyin entries, then deploy. Set the dictionary back to `null` to disable it.
+WeType handles matching, initial weight ranking and native learning. Existing
+personal `*.dict.yaml` files are never overwritten by configuration sync.
+See [optional dictionaries](../docs/dictionaries.md) for domain tables, weights,
+learning retention and limits.

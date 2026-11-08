@@ -21,6 +21,7 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
+#include <iomanip>
 #include <CommonCrypto/CommonDigest.h>
 #include "abi_macos_3.h"
 #include "text_context_abi.h"
@@ -206,6 +207,9 @@ static string word_digest(const string &value){
     CC_SHA256(value.data(),static_cast<CC_LONG>(value.size()),bytes);
     return hex(string(reinterpret_cast<char *>(bytes),sizeof(bytes)));
 }
+#include "native_lexicon.h"
+static NativeLexicon lexicon;
+static string engine_path,learning_path;
 static void sync_user_words(const string &source,const std::vector<std::pair<string,string>> &entries){
     if(source.empty()||source.size()>4096||source.find('\0')!=string::npos||entries.size()>2048)
         throw std::runtime_error("invalid user-word source");
@@ -372,6 +376,7 @@ static void select(Session &s,uint64_t ticket,size_t index) {
       if(row.cover>s.input.size())throw std::runtime_error("invalid candidate coverage");
       s.issued.clear();++s.ticket; }
     api.select(s.sid,row.text.data(),(uint32_t)row.text.size(),row.id.data(),(uint32_t)row.id.size(),nullptr,0,nullptr,0,nullptr,0,nullptr);
+    if(lexicon.ready())lexicon.learn(row.text);
     s.input.erase(0,row.cover);
     if(!s.input.empty())wait_batch(s,before);
     else {
@@ -382,6 +387,7 @@ static void select(Session &s,uint64_t ticket,size_t index) {
     fprintf(protocol,"OK\n");fflush(protocol);
 }
 static void start(const char *engine,const char *work,const char *table) {
+    engine_path=engine;learning_path=work;
     int sock=socket(AF_INET,SOCK_STREAM,0);
     sockaddr_in addr{};addr.sin_family=AF_INET;addr.sin_port=htons(9);addr.sin_addr.s_addr=htonl(INADDR_LOOPBACK);
     int rc=connect(sock,reinterpret_cast<sockaddr *>(&addr),sizeof(addr));int error=errno;close(sock);
@@ -454,6 +460,34 @@ int main(int argc,char **argv) {
             std::istringstream in(line);string cmd,arg;uint64_t ticket=0;size_t index=0;
             in>>cmd;
             if(cmd=="QUIT")break;
+            if(cmd=="LEXICON_SYNC"){
+                string extra;size_t count=0;
+                if(!(in>>count)||count>10000||in>>extra)throw std::runtime_error("invalid dictionary batch");
+                std::vector<NativeLexicon::Entry> entries;bool valid=true;size_t total=0;
+                for(size_t i=0;i<count;++i){
+                    if(getline(&line,&cap,stdin)<=0)throw std::runtime_error("incomplete dictionary batch");
+                    string tag,key,value;double weight=0;std::istringstream row(line);
+                    if(strlen(line)>16384||!(row>>tag>>key>>value>>weight)||tag!="L"||row>>extra){valid=false;continue;}
+                    try{
+                        auto code=unhex(key),text=unhex(value);total+=code.size()+text.size();
+                        if(code.empty()||code.size()>128||code.front()==','||code.back()==','||code.find(",,")!=string::npos||
+                           code.find_first_not_of("abcdefghijklmnopqrstuvwxyz,")!=string::npos||
+                           text.empty()||text.size()>4096||text.find('\0')!=string::npos||!valid_utf8(text)||
+                           !std::isfinite(weight)||weight<0||weight>1e12||total>2*1024*1024)valid=false;
+                        entries.push_back({std::move(code),std::move(text),weight});
+                    }catch(...){valid=false;}
+                }
+                if(getline(&line,&cap,stdin)<=0||string(line)!="END_LEXICON\n")throw std::runtime_error("incomplete dictionary batch");
+                if(!valid)throw std::runtime_error("invalid dictionary batch payload");
+                if(worker_group!="pinyin"&&count)throw std::runtime_error("pinyin dictionaries require a pinyin input mode");
+                // A disabled dictionary does not require the optional private ABI.
+                if(count||access((learning_path+"/rime-lexicon.state").c_str(),F_OK)==0){
+                    if(!lexicon.ready())lexicon.initialise(reinterpret_cast<void *>(api.initialize),engine_path.c_str(),learning_path.c_str());
+                    lexicon.sync(entries);
+                    for(auto &entry:sessions)if(!entry.second->closed)reset(*entry.second);
+                }
+                fprintf(protocol,"OK\n");fflush(protocol);continue;
+            }
             if(cmd=="WORDS"){
                 auto words=user_words();fprintf(protocol,"WORDS %zu\n",words.size());
                 for(const auto &word:words)fprintf(protocol,"W %s %s %s\n",hex(word.id).c_str(),hex(word.key).c_str(),hex(word.value).c_str());

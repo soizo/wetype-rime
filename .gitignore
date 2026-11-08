@@ -30,3 +30,6 @@ SKILL.md
 
 # Personal configured words must not be published with the source.
 /rime/*.txt
+/rime/*.dict.yaml
+!/rime/wetype.dict.yaml
+!/rime/wetype_extra.dict.yaml

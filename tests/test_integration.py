@@ -39,6 +39,9 @@ class ConfigSyncTests(IsolatedBackups):
             if path.is_file():
                 self.assertEqual((target / path.relative_to(source)).read_bytes(), path.read_bytes())
         self.assertIsNone(sync_configs(target))
+        (target / 'my.dict.yaml').write_text('personal vocabulary\n')
+        self.assertIsNone(sync_configs(target))
+        self.assertEqual((target / 'my.dict.yaml').read_text(), 'personal vocabulary\n')
 
     def test_missing_schema_does_not_partially_update_destination(self):
         from wetype.integration import ROOT

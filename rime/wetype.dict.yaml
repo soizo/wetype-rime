@@ -1,0 +1,12 @@
+# Optional local vocabulary, disabled until translator/dictionary is wetype.
+# Uncomment individual import_tables entries to include their vocabulary.
+---
+name: wetype
+version: "1.0"
+sort: by_weight
+use_preset_vocabulary: false
+import_tables:
+  - wetype_extra
+...
+# Add entries here, or maintain separate imported *.dict.yaml files.
+# Columns: text<TAB>full pinyin syllables<TAB>initial weight

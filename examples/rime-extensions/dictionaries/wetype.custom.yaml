@@ -1,0 +1,4 @@
+# Merge into the target scheme's <schema_id>.custom.yaml, then deploy.
+patch:
+  translator/dictionary: wetype
+# Disable again with: translator/dictionary: null

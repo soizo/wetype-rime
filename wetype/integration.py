@@ -36,7 +36,8 @@ def build(source: Path = DEFAULT_SOURCE) -> None:
                              '-o',str(out / 'surrounding_text.o')],check=True)
     subprocess.run(common + ['-Wno-unused-parameter', '-Wno-missing-field-initializers', '-fvisibility=hidden',
                             '-dynamiclib', '-undefined', 'dynamic_lookup', '-I' + str(out / 'include'),
-                            '-I' + str(DEFAULT_BOOST_INCLUDE), '-I' + str(headers), str(ROOT / 'native/rime_wetype.cpp'),
+                            '-I' + str(DEFAULT_BOOST_INCLUDE), '-isystem', str(headers), '-isystem', str(source / 'include'),
+                            str(ROOT / 'native/rime_wetype.cpp'),
                             str(out / 'surrounding_text.o'),'-framework','InputMethodKit','-framework','AppKit',
                             '-o', str(out / 'librime-wetype.dylib')], check=True)
 
@@ -70,6 +71,10 @@ def sync_configs(rime_dir: Path) -> Path | None:
     for path in files:
         relative = path.relative_to(source)
         target = rime_dir / relative
+        # Optional dictionary starters become personal source files after the
+        # first installation. Never replace a user's vocabulary on an upgrade.
+        if path.name.endswith('.dict.yaml') and target.exists():
+            continue
         if target.exists():
             if target.read_bytes() == path.read_bytes():
                 continue

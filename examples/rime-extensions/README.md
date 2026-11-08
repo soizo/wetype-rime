@@ -37,3 +37,12 @@ The example excludes `user_table` through Rime's standard `excluded_types` setti
 示例默认作用于统一方案。要作用于独立方案，将补丁文件改名为对应的 `<schema_id>.custom.yaml`，例如 `wetype_quanpin.custom.yaml`；短语表和 Lua 文件可以共用。
 
 参考 Rime 官方的 [配置语法](https://github.com/rime/home/wiki/Configuration) 和 [定制指南](https://github.com/rime/home/wiki/CustomizationGuide)。
+
+## Optional native dictionaries
+
+Merge `dictionaries/wetype.custom.yaml` into the target scheme's normal patch to
+enable `wetype.dict.yaml`. Its `import_tables` list selects independent ordinary
+Rime dictionary files, including the empty `wetype_extra.dict.yaml` starter.
+Set `translator/dictionary: null` and deploy to disable imports. This extension is
+disabled by default; [the dictionary guide](../../docs/dictionaries.md) explains
+entry formats, native weights and retained learning.
