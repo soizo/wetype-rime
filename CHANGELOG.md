@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Enable kaomoji and symbol-expression switches by default in the supplied patch, and start the mainland Xiaohe scheme in precise mode whilst retaining its fuzzy toggle.
+
 - Use concise Chinese scheme names and option labels, shared Rime preset inheritance and ordinary personal patches. Keep existing schema IDs and all input features.
 - Organise source under `src/` and distribution presets under `data/`. Keep installed engine resources, learning and installation metadata together in `<Rime user directory>/wetype/`; retire the generated root runtime configuration with a backup.
 - Relocate the legacy default runtime without copying live learning files, preserving old paths through a compatibility symlink. Support relative in-profile bindings, symlinked profiles and explicit external runtime directories.

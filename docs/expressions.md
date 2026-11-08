@@ -8,12 +8,12 @@ Unicode Emoji setting:
 | `kaomoji` | Text faces, such as `开心(*^▽^*)` for full-pinyin `kaixin` |
 | `symbol_emoji` | Text symbols, such as `☆` and `★` for `xingxing`, or `∞` for `wuqiong` |
 
-Both new options start disabled. The existing Unicode Emoji setting keeps
+Both options start enabled when the expression patch is installed. The existing Unicode Emoji setting keeps
 its previous value. Each option rebuilds the native session and clears the
 current composition when changed, so old candidates cannot be selected after a
 switch.
-The example uses Rime's `reset: 0` switch defaults; enable the wanted option
-after reloading the scheme, or adjust those ordinary switch defaults yourself.
+The example uses Rime's `reset: 1` switch defaults. Adjust these ordinary
+switch defaults in the scheme patch if a different starting state is preferred.
 
 ## Enable the options in a scheme
 

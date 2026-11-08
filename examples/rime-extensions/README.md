@@ -38,4 +38,4 @@ Merge `native-cell-dictionaries/wetype.custom.yaml`. It selects the three native
 
 ## Local expressions
 
-Merge `expressions/wetype.custom.yaml` for independent kaomoji and symbol options, initially disabled. Installation supplies `kaomoji.txt` and `symbol_emoji.txt` starters without replacing existing files. Add literal expressions as ordinary Rime text-table rows and deploy. Native recommendations use WeType; personal rows use Rime's official table translator. See [expressions](../../docs/expressions.md). Emoji Plus is prohibited and cannot be enabled by a scheme patch.
+Merge `expressions/wetype.custom.yaml` for independent kaomoji and symbol options, both enabled by default. Installation supplies `kaomoji.txt` and `symbol_emoji.txt` starters without replacing existing files. Add literal expressions as ordinary Rime text-table rows and deploy. Native recommendations use WeType; personal rows use Rime's official table translator. See [expressions](../../docs/expressions.md). Emoji Plus is prohibited and cannot be enabled by a scheme patch.

@@ -63,7 +63,7 @@ The [examples](../examples/rime-extensions/README.md) use ordinary Rime patches 
 
 Native Emoji recommendations bind the Rime option named by `wetype/emoji_option`. No OpenCC Emoji map is needed. The mainland variant enables this by default; the 12 base schemes do not bind an Emoji switch. Changing the option clears composition and opens a new native session, retaining native ranking and selection feedback.
 
-[Local expressions](../docs/expressions.md) add independent kaomoji and symbol options, initially disabled. Edit `kaomoji.txt` and `symbol_emoji.txt` with ordinary Rime text-table rows. Personal expressions use the official table backend and retain `user_table` literal-output exclusions. Emoji Plus remains prohibited and cannot be enabled through configuration.
+[Local expressions](../docs/expressions.md) add independent kaomoji and symbol options, enabled by default in the expression patch. Edit `kaomoji.txt` and `symbol_emoji.txt` with ordinary Rime text-table rows. Personal expressions use the official table backend and retain `user_table` literal-output exclusions. Emoji Plus remains prohibited and cannot be enabled through configuration.
 
 [Optional dictionaries](../docs/dictionaries.md) use `translator/dictionary`, ordinary `*.dict.yaml` files and `import_tables`. The setting defaults to `null`. Enable the empty `wetype.dict.yaml` and `custom.dict.yaml` starters with `translator/dictionary: wetype`, add full-pinyin entries and deploy. WeType handles matching, initial weights and learning. Disable imports with `null`; existing dictionary files are preserved on upgrade.
 
@@ -79,6 +79,6 @@ algebra:
   - derive/ing$/in/
 ```
 
-The mainland variant enables fuzzy spelling and offers 精准音 / 模糊音. The other base schemes can opt in using the [fuzzy patch](../examples/rime-extensions/fuzzy/wetype.custom.yaml). Full pinyin `qin` and Xiaohe `qb` can then include `qing` candidates such as 请 with the comment 模糊. Librime performs the spelling algebra; WeType's fuzzy flags stay disabled.
+The mainland variant offers 精准音 / 模糊音 and defaults to 精准音 (fuzzy spelling off). The other base schemes can opt in using the [fuzzy patch](../examples/rime-extensions/fuzzy/wetype.custom.yaml). Full pinyin `qin` and Xiaohe `qb` can then include `qing` candidates such as 请 with the comment 模糊. Librime performs the spelling algebra; WeType's fuzzy flags stay disabled.
 
 The original first three candidates remain ahead of deduplicated fuzzy results. Branches retain their native session, candidate identifiers and selection feedback. Fuzzy additions require complete lowercase syllables, at most 32 input characters, two fuzzy syllables per path and three expanded spellings. Branch candidates cover the full input; the original path retains partial selection. Uppercase, unsupported layouts, unrecognised syllables and longer input continue on the native path. Changing the option clears composition. Subsequent rule edits need only deployment.

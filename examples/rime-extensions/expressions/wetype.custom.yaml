@@ -1,14 +1,14 @@
 # Merge into the relevant <schema_id>.custom.yaml, then deploy.
-# New expression options start disabled. Existing Unicode Emoji settings remain.
+# Expression options start enabled. Existing Unicode Emoji settings remain.
 patch:
   wetype/kaomoji_option: kaomoji
   wetype/symbol_emoji_option: symbol_emoji
   "switches/+":
     - name: kaomoji
-      reset: 0
+      reset: 1
       states: [颜文字关, 颜文字开]
     - name: symbol_emoji
-      reset: 0
+      reset: 1
       states: [符号表情关, 符号表情开]
   "engine/translators/+":
     - wetype_expression_translator@kaomoji

@@ -30,8 +30,12 @@ int main(int argc,char **argv){
   const char *schema=argc==4?argv[3]:"wetype";bool flypy=std::string(schema).find("flypy")!=std::string::npos;
   const char *happy=flypy?"kdxb":"kaixin",*stars=flypy?"xkxk":"xingxing",*hello=flypy?"nihc":"nihao";
   auto session=[&]{auto id=api->create_session();require(api->select_schema(id,schema),"scheme unavailable");api->set_option(id,"ascii_mode",false);api->set_option(id,"traditionalization",false);api->set_option(id,"emoji",false);return id;};
-  auto id=session();require(!contains(rows(id,happy),"开心(*^▽^*)"),"kaomoji enabled by default");
-  require(!contains(rows(id,"uukao"),"后(๑•̀ㅂ•́)و✧"),"custom kaomoji enabled by default");
+  auto id=session();require(contains(rows(id,happy),"开心(*^▽^*)"),"kaomoji not enabled by default");
+  require(contains(rows(id,stars),"☆"),"symbols not enabled by default");
+  require(property(id,"_wetype_expression_flags")=="6","wrong default expression flags");
+  api->set_option(id,"kaomoji",false);api->set_option(id,"symbol_emoji",false);
+  require(!contains(rows(id,happy),"开心(*^▽^*)"),"disabled native kaomoji remained");
+  require(!contains(rows(id,"uukao"),"后(๑•̀ㅂ•́)و✧"),"disabled custom kaomoji remained");
   api->set_option(id,"kaomoji",true);require(std::string(api->get_input(id)).empty(),"expression toggle retained stale composition");
   require(contains(rows(id,happy),"开心(*^▽^*)"),"native kaomoji missing");require(property(id,"_wetype_expression_flags")=="2","wrong native kaomoji flags");
   api->set_option(id,"traditionalization",true);auto menu=rows(id,"uukao");require(menu[0]=="后(๑•̀ㅂ•́)و✧","custom kaomoji priority/literal text lost");
