@@ -1,0 +1,7 @@
+{
+  "diagnostics.globals": [
+    "rime_api",
+    "yield",
+    "Candidate"
+  ]
+}
