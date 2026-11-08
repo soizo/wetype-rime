@@ -52,3 +52,7 @@ ascii_composer:
 wetype:
   __include: wetype.runtime:/wetype
   mode: ziguang
+
+# User phrases are parsed by Rime and stored in the native WeType engine.
+wetype_user_words:
+  __include: wetype_user_words:/settings

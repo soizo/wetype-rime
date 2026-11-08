@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Manage native WeType user words through Rime's official stabledb text tables, with source-scoped updates and removals, local storage and standard candidate-deletion notifications.
+
 - Add opt-in Rime spelling-algebra fuzzy matching for full pinyin and Xiaohe without enabling engine fuzzy options or adding a word dictionary. Keep rules in wetype_fuzzy.yaml, initially in/ing, and enable the switch in the mainland Xiaohe variant.
 
 - Enable opt-in native WeType Unicode Emoji recommendations through the session's local engine settings, preserving candidate ranking and selection feedback.

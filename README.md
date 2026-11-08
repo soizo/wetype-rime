@@ -128,6 +128,8 @@ The optional [`WeType小鹤大陆` variant](rime/wetype_flypy_gov.schema.yaml) i
 
 Optional fuzzy spelling uses Rime's own `speller/algebra` through the adapter, with editable rules in [`rime/wetype_fuzzy.yaml`](rime/wetype_fuzzy.yaml); WeType's fuzzy options stay disabled. Full pinyin and Xiaohe are supported, with `in / ing` as the initial rules. The mainland Xiaohe variant enables this by default and exposes an on/off switch. Other base schemes can opt in using the [fuzzy example](examples/rime-extensions/fuzzy/wetype.custom.yaml). See the [configuration guide](rime/README.md#rime-模糊音) for input and candidate limits.
 
+[User-word management](docs/user-words.md) uses Rime's standard text-table format and WeType's native user-word store. Edit `wetype_user_words.txt` in the Rime user directory and deploy to add, update or remove configured phrases. Rime's Control + Delete candidate action also reaches the native engine. Candidate ranking and selection learning remain with WeType.
+
 ## Input Modes
 
 The unified **WeTypeRime** scheme offers all 11 input modes through Rime's option menu. Each mode also has its own standalone scheme, displayed with a `WeTypeRime 拼音`-style name. The internal schema IDs remain `wetype` and `wetype_*` so existing configurations keep working.
@@ -173,7 +175,7 @@ Unknown source binaries are recorded as `unvalidated`. Extraction and file verif
 
 Future releases can be attempted without adding a version or hash to an allowlist. They must still use a supported arm64 Mach-O layout, dictionary index schema and private engine interface. Changes to these formats or interfaces require adapter updates; a successful probe alone does not validate every input mode or long-term stability. The current commands operate on local macOS applications and do not download versions or extract Windows/Android packages.
 
-First activation includes engine and model loading. Latency can vary with model state and hardware. If the engine fails, the adapter preserves raw input and reports the error through candidate comments and local logs. Long-term stability and correction of accidental learning remain areas for further work.
+First activation includes engine and model loading. Latency can vary with model state and hardware. If the engine fails, the adapter preserves raw input and reports the error through candidate comments and local logs. Long-term stability remains an area for further work.
 
 This release contains the macOS implementation only.
 

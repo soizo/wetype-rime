@@ -43,6 +43,7 @@ python3 tests/smoke_worker.py
 python3 tests/smoke_context.py
 python3 tests/smoke_rime.py --reloads 1
 python3 tests/smoke_config.py
+python3 tests/smoke_user_words.py
 ```
 
 The checks cover real candidates, selection feedback, partial selection, persistent learning, uppercase input, syllable boundaries, deletion and context isolation. The real-librime test also exercises the unified options, standalone modes, preceding-text behavior and module reinitialization. Native snapshot checks use a test-only command that is not compiled into the production worker.
@@ -66,6 +67,8 @@ Run `python3 tests/smoke_fuzzy.py --rime-source /path/to/librime` for determinis
 `sync_configs` copies project YAML/TXT and Lua files independently of engine staging. Conflicting destination files are backed up; destination-only personal files are left alone. `stage` generates only `wetype.runtime.yaml` for machine-specific interface paths. Every scheme includes `wetype.runtime:/wetype` and declares its own mode. `modes.json` remains the engine ABI catalog; adding a new input mode requires updating both that catalog and its scheme, while ordinary configuration edits need only synchronization and Rime deployment.
 
 The adapter uses Rime's official C++ component and module interfaces. Lua only loads the native module. Candidates retain their session, revision ticket and engine selection identifier so selection feedback cannot be sent to an unrelated query.
+
+`native/rime_user_words.h` reads configured entries with librime's registered `stabledb` and `UserDbValue` interfaces. A bounded batch is reconciled through the engine's native hot-word getter/setter; deterministic IDs identify the owning table without resetting ordinary learning. Before the first snapshot, removal of a reserved, never-created marker ID waits for the native store to load; an early empty snapshot must not be mistaken for an empty dictionary. Rime's delete notification uses the selected candidate's native session and revision. Hot-word IDs differ from opaque candidate IDs, so exact phrase/code matches use the hot-word removal API; other candidates use the engine's learned-candidate deletion API. User-word imports run during background preparation, not on each keystroke. See [user-word configuration](user-words.md) for persistence and deletion semantics. `smoke_user_words.py` checks native source isolation, storage across worker restarts, actual Rime table parsing in all 12 schemes, native hot-word and learned-candidate deletion, edited sources after reinitialisation, and disabled/error fallback.
 
 The engine and dependent frameworks are copied from a local WeType application. The executable copy is converted into a loadable bundle; algorithm code and model data are not patched. The original application's directory is denied during worker execution.
 

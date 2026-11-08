@@ -1,0 +1,8 @@
+# Personal WeType user words, read by Rime's stabledb component.
+# Copy to rime/wetype_user_words.txt, edit locally, then sync and redeploy.
+# Separate fields with a literal Tab: phrase<Tab>input code[<Tab>weight]
+# Codes are literal keystrokes; spaces between syllables are removed.
+# The optional Rime weight is parsed but WeType controls native ranking.
+# Examples (uncomment after replacing them with your own phrases):
+# 我的用户词	myphrase
+# 自定义短语	zi ding yi duan yu

@@ -1,0 +1,5 @@
+# Shared Rime configuration for native WeType user-word management.
+settings:
+  enabled: true
+  user_dict: wetype_user_words
+  db_class: stabledb

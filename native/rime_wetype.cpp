@@ -20,6 +20,7 @@
 #include "engine_client.h"
 #include "surrounding_text.h"
 #include "rime_fuzzy.h"
+#include "rime_user_words.h"
 namespace wetype {
 static const InputMode &selected_mode(rime::Engine *engine){
     string fixed;engine->schema()->config()->GetString("wetype/mode",&fixed);
@@ -85,12 +86,15 @@ class Translator:public rime::Translator {
     std::shared_ptr<Client> host;
     Preparing preparing;
     uint64_t session=0;
-    rime::connection selected,updated,option_changed;
+    rime::connection selected,updated,option_changed,deleted;
     bool active=false;
     bool emoji_enabled=false;
     bool fuzzy_enabled=false;
     RimeFuzzy fuzzy;
     std::vector<uint64_t> fuzzy_sessions;
+    RimeUserWords user_words;
+    std::shared_future<void> words_preparing;
+    bool words_valid=false;
     string launcher,mode_id;
     string before_text;
     string logged_context_source;
@@ -120,7 +124,8 @@ class Translator:public rime::Translator {
         if(host)for(auto id:fuzzy_sessions)host->command("CLOSE "+std::to_string(id));
         fuzzy_sessions.clear();
         session=0;active=false;before_text.clear();context_sampled=false;
-        if(path!=launcher){host.reset();preparing={};launcher=path;}
+        bool changed_host=path!=launcher;
+        if(changed_host){host.reset();preparing={};words_preparing={};launcher=path;}
         mode_id=mode.id;
         emoji_enabled=emoji;
         fuzzy_enabled=use_fuzzy;
@@ -131,9 +136,20 @@ class Translator:public rime::Translator {
             engine_->context()->set_property("_wetype_fuzzy_error",e.what());
         }
         if(!preparing.valid())preparing=prepare(launcher);
+        if(words_valid&&!words_preparing.valid()&&!user_words.source.empty()){
+            auto pending=preparing;auto words=user_words;
+            words_preparing=std::async(std::launch::async,[pending,words]{pending.get()->sync_words(words.source,words.entries);}).share();
+        }
         engine_->context()->set_property("_wetype_mode",mode_id);
     }
-    void ensure(){choose_mode();if(!host)host=preparing.get();if(!session)session=host->open(mode_id,emoji_enabled);}
+    void ensure(){
+        choose_mode();if(!host)host=preparing.get();
+        if(words_preparing.valid()){
+            try{words_preparing.get();engine_->context()->set_property("_wetype_user_words_error","");}
+            catch(const std::exception &e){engine_->context()->set_property("_wetype_user_words_error",e.what());}
+        }
+        if(!session)session=host->open(mode_id,emoji_enabled);
+    }
     void error(const std::exception &e){
         string path;if(engine_->schema()->config()->GetString("wetype/log_file",&path))
             if(FILE *f=fopen(path.c_str(),"a")){fprintf(f,"[wetype] %s\n",e.what());fclose(f);}
@@ -199,8 +215,10 @@ public:
     explicit Translator(const rime::Ticket &ticket):rime::Translator(ticket){
         // Only pipe/worker startup runs in the background; all Rime objects and
         // candidate/context operations remain on the frontend's own thread.
-        choose_mode();
         auto ctx=engine_->context();
+        try{user_words.load(engine_->schema()->config());words_valid=true;ctx->set_property("_wetype_user_words_error","");}
+        catch(const std::exception &e){ctx->set_property("_wetype_user_words_error",e.what());}
+        choose_mode();
         Dl_info image{};
         if(dladdr(reinterpret_cast<void *>(&prepare),&image)&&image.dli_fname){
             ctx->set_property("_wetype_adapter",image.dli_fname);
@@ -217,6 +235,16 @@ public:
             if(own->session!=session&&std::find(fuzzy_sessions.begin(),fuzzy_sessions.end(),own->session)==fuzzy_sessions.end())return;
             try{host->command("SELECT "+std::to_string(own->session)+" "+std::to_string(own->ticket)+" "+std::to_string(own->index));}
             catch(const std::exception &e){error(e);}
+        });
+        deleted=ctx->delete_notifier().connect(-100,[this](rime::Context *c){
+            auto own=std::dynamic_pointer_cast<WetypeCandidate>(rime::Candidate::GetGenuineCandidate(c->GetSelectedCandidate()));
+            if(!own||!host||own->mode!=mode_id)return;
+            if(own->session!=session&&std::find(fuzzy_sessions.begin(),fuzzy_sessions.end(),own->session)==fuzzy_sessions.end())return;
+            try{
+                host->command("DELETE "+std::to_string(own->session)+" "+std::to_string(own->ticket)+" "+std::to_string(own->index));
+                c->set_property("_wetype_delete_error","");
+                c->RefreshNonConfirmedComposition();
+            }catch(const std::exception &e){c->set_property("_wetype_delete_error",e.what());}
         });
         updated=ctx->update_notifier().connect(-100,[this](rime::Context *c){
             if(c->input().empty()){
@@ -247,7 +275,7 @@ public:
             try{string previous=mode_id;choose_mode();if(previous!=mode_id)c->Clear();}catch(const std::exception &e){error(e);}
         });
     }
-    ~Translator(){lifetime.reset();selected.disconnect();updated.disconnect();option_changed.disconnect();if(host)try{
+    ~Translator(){lifetime.reset();selected.disconnect();deleted.disconnect();updated.disconnect();option_changed.disconnect();if(host)try{
         if(session)host->command("CLOSE "+std::to_string(session));
         for(auto id:fuzzy_sessions)host->command("CLOSE "+std::to_string(id));
     }catch(...){} }

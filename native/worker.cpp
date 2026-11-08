@@ -21,9 +21,11 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
+#include <CommonCrypto/CommonDigest.h>
 #include "abi_macos_3.h"
 #include "text_context_abi.h"
 #include "session_options.h"
+#include "user_words_abi.h"
 #include <wetype_modes.h>
 using namespace std::chrono_literals;
 using std::string;
@@ -88,6 +90,9 @@ struct Api {
     int (*input)(uint64_t, const char *, uint32_t, const void *, uint32_t);
     int (*drop)(uint64_t,uint8_t,const void *,uint32_t);
     void (*set_context)(uint64_t,const TextAroundCursor *,uint32_t);
+    bool (*set_word)(const NativeUserWord *);
+    void (*get_words)(bool (*)(NativeUserWord,void *),void *);
+    bool (*block_word)(uint64_t,const char *,uint32_t,const void *,uint32_t,bool);
 #ifdef WETYPE_CONTEXT_TEST
     void (*context_snapshot)(uint64_t,void (*)(const TextAroundCursor *,void *),void *);
 #endif
@@ -148,6 +153,93 @@ static std::vector<std::unique_ptr<Listener>> listeners;
 static std::map<uint64_t,std::unique_ptr<Session>> sessions;
 static uint64_t next_handle=1;
 static uint64_t prepared_handle=0;
+static bool valid_utf8(const string &text){
+    for(size_t i=0;i<text.size();){
+        unsigned char lead=text[i++];
+        if(lead<0x80)continue;
+        unsigned more=lead>=0xc2&&lead<=0xdf?1:lead>=0xe0&&lead<=0xef?2:lead>=0xf0&&lead<=0xf4?3:0;
+        if(!more||i+more>text.size())return false;
+        unsigned char next=text[i];
+        if((lead==0xe0&&next<0xa0)||(lead==0xed&&next>=0xa0)||
+           (lead==0xf0&&next<0x90)||(lead==0xf4&&next>=0x90))return false;
+        while(more--){if((static_cast<unsigned char>(text[i++])&0xc0)!=0x80)return false;}
+    }
+    return true;
+}
+static std::vector<UserWord> user_words(){
+    if(!api.get_words)throw std::runtime_error("native user-word API unavailable");
+    // The native getter can return an empty snapshot whilst the store loads.
+    // Removal takes the store's load barrier. A reserved, never-created ID
+    // makes this a no-op, without inserting a word or resetting learning.
+    static bool prepared=false;
+    if(!prepared){
+        if(!api.set_word)throw std::runtime_error("native user-word API unavailable");
+        const string marker="wetype-rime:reserved:initialisation-barrier";
+        NativeUserWord barrier{};barrier.id=marker.data();barrier.id_len=static_cast<uint32_t>(marker.size());
+        api.set_word(&barrier);prepared=true;
+    }
+    struct Capture {std::vector<UserWord> rows;bool invalid=false;} capture;
+    api.get_words([](NativeUserWord row,void *context){
+        auto &out=*static_cast<Capture *>(context);
+        if(out.rows.size()>=10000||!row.id||!row.id_len||(!row.key&&row.key_len)||!row.value||
+           row.id_len>1024||row.key_len>128||row.value_len>4096){out.invalid=true;return false;}
+        out.rows.push_back({string(row.id,row.id_len),row.key_len?string(row.key,row.key_len):string(),string(row.value,row.value_len)});
+        return true;
+    },&capture);
+    if(capture.invalid)throw std::runtime_error("invalid native user-word list");
+    return capture.rows;
+}
+static void set_user_word(const string &id,const string &key,const string &value,bool remove=false){
+    if(!api.set_word)throw std::runtime_error("native user-word API unavailable");
+    if(id.size()>1024||key.size()>128||value.size()>4096||id.find('\0')!=string::npos||
+       key.find('\0')!=string::npos||value.find('\0')!=string::npos||
+       !valid_utf8(id)||!valid_utf8(key)||!valid_utf8(value)||
+       (remove?id.empty():(key.empty()||value.empty())))throw std::runtime_error("invalid user word");
+    NativeUserWord word{};
+    if(!id.empty()){word.id=id.data();word.id_len=static_cast<uint32_t>(id.size());}
+    if(!remove){word.key=key.data();word.key_len=static_cast<uint32_t>(key.size());
+                word.value=value.data();word.value_len=static_cast<uint32_t>(value.size());}
+    if(!api.set_word(&word))throw std::runtime_error("native user-word update rejected");
+}
+static string word_digest(const string &value){
+    unsigned char bytes[CC_SHA256_DIGEST_LENGTH];
+    CC_SHA256(value.data(),static_cast<CC_LONG>(value.size()),bytes);
+    return hex(string(reinterpret_cast<char *>(bytes),sizeof(bytes)));
+}
+static void sync_user_words(const string &source,const std::vector<std::pair<string,string>> &entries){
+    if(source.empty()||source.size()>4096||source.find('\0')!=string::npos||entries.size()>2048)
+        throw std::runtime_error("invalid user-word source");
+    string prefix="rime:"+word_digest(source)+":";
+    std::map<string,UserWord> previous,desired;
+    for(const auto &word:user_words())if(word.id.rfind(prefix,0)==0)previous[word.id]=word;
+    for(const auto &entry:entries){
+        if(entry.first.empty()||entry.first.size()>128||entry.second.empty()||entry.second.size()>4096||
+           entry.first.find_first_not_of("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';")!=string::npos||
+           entry.second.find('\0')!=string::npos||!valid_utf8(entry.second))throw std::runtime_error("invalid configured user word");
+        string id=prefix+word_digest(entry.first+'\0'+entry.second);
+        desired[id]={id,entry.first,entry.second};
+    }
+    // Apply additions before removals. On rejection, restore only this source's
+    // owned entries; native learned words and other sources are never reset.
+    std::vector<string> added;std::vector<UserWord> changed;
+    try{
+        for(const auto &item:desired){
+            const auto &word=item.second;
+            auto old=previous.find(item.first);
+            if(old==previous.end()||old->second.key!=word.key||old->second.value!=word.value){
+                set_user_word(word.id,word.key,word.value);
+                if(old==previous.end())added.push_back(word.id);else changed.push_back(old->second);
+            }
+        }
+        for(const auto &item:previous)if(!desired.count(item.first)){
+            set_user_word(item.first,{},{},true);changed.push_back(item.second);
+        }
+    }catch(...){
+        for(const auto &id:added)try{set_user_word(id,{},{},true);}catch(...){fprintf(stderr,"[wetype] user-word rollback failed\n");}
+        for(const auto &word:changed)try{set_user_word(word.id,word.key,word.value);}catch(...){fprintf(stderr,"[wetype] user-word rollback failed\n");}
+        throw;
+    }
+}
 static void events(uint64_t,const uint32_t *types,void *const *data,uint32_t count,uint64_t context) {
     auto &l=*reinterpret_cast<Listener *>(context);
     if(!types||!data||count>128)return;
@@ -301,6 +393,9 @@ static void start(const char *engine,const char *work,const char *table) {
     symbol(image,api.listen,"wxime_add_session_listener");symbol(image,api.input,"wxime_process_input");
     symbol(image,api.drop,"wxime_drop_last");
     symbol(image,api.set_context,"wxime_set_text_around_cursor_struct");
+    api.set_word=reinterpret_cast<decltype(api.set_word)>(dlsym(image,"wxime_set_user_hot_word"));
+    api.get_words=reinterpret_cast<decltype(api.get_words)>(dlsym(image,"wxime_get_user_hot_word"));
+    api.block_word=reinterpret_cast<decltype(api.block_word)>(dlsym(image,"wxime_add_word_to_user_block_list"));
 #ifdef WETYPE_CONTEXT_TEST
     symbol(image,api.context_snapshot,"wxime_get_text_around_cursor_snap_shot");
 #endif
@@ -359,6 +454,41 @@ int main(int argc,char **argv) {
             std::istringstream in(line);string cmd,arg;uint64_t ticket=0;size_t index=0;
             in>>cmd;
             if(cmd=="QUIT")break;
+            if(cmd=="WORDS"){
+                auto words=user_words();fprintf(protocol,"WORDS %zu\n",words.size());
+                for(const auto &word:words)fprintf(protocol,"W %s %s %s\n",hex(word.id).c_str(),hex(word.key).c_str(),hex(word.value).c_str());
+                fprintf(protocol,"END\n");fflush(protocol);continue;
+            }
+            if(cmd=="WORD_SYNC"){
+                string source,extra;size_t count=0;
+                if(!(in>>source>>count)||count>2048||in>>extra)throw std::runtime_error("invalid user-word batch");
+                std::vector<std::pair<string,string>> entries;bool valid=true;size_t total=0;
+                for(size_t i=0;i<count;++i){
+                    if(getline(&line,&cap,stdin)<=0)throw std::runtime_error("incomplete user-word batch");
+                    if(strlen(line)>16384){valid=false;continue;}
+                    string tag,key,value;std::istringstream row(line);
+                    if(!(row>>tag>>key>>value)||tag!="W"||row>>extra){valid=false;continue;}
+                    try{
+                        auto code=unhex(key),text=unhex(value);total+=code.size()+text.size();
+                        if(total>2*1024*1024)valid=false;
+                        entries.emplace_back(std::move(code),std::move(text));
+                    }catch(...){valid=false;}
+                }
+                if(getline(&line,&cap,stdin)<=0||string(line)!="END_WORDS\n")throw std::runtime_error("incomplete user-word batch");
+                if(!valid)throw std::runtime_error("invalid user-word batch payload");
+                sync_user_words(unhex(source),entries);
+                for(auto &entry:sessions)if(!entry.second->closed&&!entry.second->input.empty())reset(*entry.second);
+                fprintf(protocol,"OK\n");fflush(protocol);continue;
+            }
+            if(cmd=="WORD_SET"||cmd=="WORD_REMOVE"){
+                string id,key,value;
+                if(!(in>>id))throw std::runtime_error("missing user-word id");
+                bool remove=cmd=="WORD_REMOVE";
+                if(!remove&&!(in>>key>>value))throw std::runtime_error("missing user-word fields");
+                set_user_word(unhex(id),remove?string():unhex(key),remove?string():unhex(value),remove);
+                for(auto &entry:sessions)if(!entry.second->closed)reset(*entry.second);
+                fprintf(protocol,"OK\n");fflush(protocol);continue;
+            }
             if(cmd=="OPEN") {
                 if(!(in>>arg))arg=worker_group=="pinyin"?"quanpin":worker_group;
                 const auto &mode=input_mode(arg);
@@ -387,6 +517,25 @@ int main(int argc,char **argv) {
             }
 #endif
             if(cmd=="SELECT" && in>>ticket>>index){select(s,ticket,index);continue;}
+            if(cmd=="DELETE"&&in>>ticket>>index){
+                Candidate word;
+                {std::lock_guard<std::mutex> guard(s.mu);
+                 if(ticket!=s.ticket||index>=s.issued.size()||s.issued_input!=s.input)throw std::runtime_error("stale candidate");
+                 word=s.issued[index];}
+                // Hot words have their own native store. The general learned-
+                // candidate deletion API does not remove these configured terms.
+                std::vector<UserWord> matching;
+                // Candidate IDs are opaque native binary data, not hot-word
+                // record IDs. Match the selected phrase and exact covered code.
+                const string code=s.issued_input.substr(0,word.cover);
+                if(api.get_words)for(const auto &entry:user_words())
+                    if(entry.value==word.text&&entry.key==code)matching.push_back(entry);
+                if(!matching.empty())for(const auto &entry:matching)set_user_word(entry.id,{},{},true);
+                else if(!api.block_word||!api.block_word(s.sid,word.text.data(),static_cast<uint32_t>(word.text.size()),
+                                                       word.id.data(),static_cast<uint32_t>(word.id.size()),true))
+                    throw std::runtime_error("native candidate deletion rejected");
+                reset(s);fprintf(protocol,"OK\n");fflush(protocol);continue;
+            }
             if(cmd=="RESET")reset(s);
             else if(cmd=="CLOSE") {
                 {std::lock_guard<std::mutex> guard(s.mu);s.closed=true;s.issued.clear();s.candidates.clear();}

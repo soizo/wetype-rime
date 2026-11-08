@@ -13,6 +13,7 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
+#include <map>
 extern char **environ;
 namespace wetype {
 using std::string;
@@ -34,6 +35,7 @@ class Client {
     int input=-1,output=-1;
     string buffered;
     std::mutex mu;
+    std::map<string,string> word_sources;
     bool broken=false;
     [[noreturn]] void transport_error(const char *message){broken=true;throw std::runtime_error(message);}
     void write(const string &message) {
@@ -71,7 +73,7 @@ class Client {
             if(buffered.size()>1048576)transport_error("engine response too large");
         }
     }
-    string reply(){string s=line();if(s.rfind("ERROR ",0)==0)throw std::runtime_error(unhex(s.substr(6)));return s;}
+    string reply(int timeout=6000){string s=line(timeout);if(s.rfind("ERROR ",0)==0)throw std::runtime_error(unhex(s.substr(6)));return s;}
 public:
     explicit Client(const string &launcher) {
         int a[2],b[2];if(pipe(a))throw std::runtime_error("pipe failed");
@@ -103,6 +105,24 @@ public:
     }
     uint64_t open(const string &mode="quanpin",bool emoji=false){std::lock_guard<std::mutex> lock(mu);write("OPEN "+mode+(emoji?" 1":" 0"));string s=reply();uint64_t id=0;std::istringstream in(s);string tag;in>>tag>>id;if(tag!="OPENED"||!id)throw std::runtime_error("invalid session response");return id;}
     void command(const string &s){std::lock_guard<std::mutex> lock(mu);write(s);if(reply()!="OK")throw std::runtime_error("invalid engine acknowledgement");}
+    void sync_words(const string &source,const std::vector<std::pair<string,string>> &entries){
+        if(source.empty())return;
+        if(entries.size()>2048||source.size()>4096)throw std::runtime_error("oversized user-word configuration");
+        size_t bytes=0;
+        for(const auto &entry:entries){
+            bytes+=entry.first.size()+entry.second.size();
+            if(entry.first.size()>128||entry.second.size()>4096||bytes>2*1024*1024)
+                throw std::runtime_error("oversized user-word configuration");
+        }
+        string request="WORD_SYNC "+hex(source)+" "+std::to_string(entries.size());
+        for(const auto &entry:entries)request+="\nW "+hex(entry.first)+" "+hex(entry.second);
+        request+="\nEND_WORDS";
+        std::lock_guard<std::mutex> lock(mu);
+        auto old=word_sources.find(source);
+        if(old!=word_sources.end()&&old->second==request)return;
+        write(request);if(reply(30000)!="OK")throw std::runtime_error("invalid user-word acknowledgement");
+        word_sources[source]=std::move(request);
+    }
     Result query(uint64_t id,const string &text,const string &before={}){
         std::lock_guard<std::mutex> lock(mu);write("QUERY "+std::to_string(id)+" "+hex(text)+" "+hex(before));
         Result result{};size_t count=0;string tag;std::istringstream in(reply());in>>tag>>result.ticket>>count;
