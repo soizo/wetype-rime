@@ -178,10 +178,13 @@ class Translator:public rime::Translator {
             auto result=host->query(session,input,before_text);active=true;
             // Promote only exact, full-coverage rows actually returned by the
             // engine. Preserve their original indices for native feedback.
-            const bool prioritise=words_valid&&ctx->get_property("_wetype_user_words_error").empty();
+            const bool words_available=words_valid&&ctx->get_property("_wetype_user_words_error").empty();
             auto phrase_priority=[&](const Row &row)->std::optional<int>{
-                if(!prioritise||row.cover!=input.size())return {};
+                if(!words_available||row.cover!=input.size())return {};
                 return user_words.priority(input,row.text);
+            };
+            auto configured_phrase=[&](const Row &row,const string &code){
+                return words_available&&row.cover<=code.size()&&user_words.contains(code.substr(0,row.cover),row.text);
             };
             size_t phrases=0;
             for(const auto &row:result.rows)if(phrase_priority(row))++phrases;
@@ -192,18 +195,21 @@ class Translator:public rime::Translator {
             });
             auto variants=fuzzy_enabled&&ctx->get_property("_wetype_fuzzy_error").empty()?fuzzy.variants(input):std::vector<string>{};
             std::set<std::pair<string,size_t>> seen;
-            auto append=[&](const Row &row,uint64_t ticket,uint64_t id,bool is_fuzzy){
+            auto append=[&](const Row &row,uint64_t ticket,uint64_t id,bool is_fuzzy,bool custom_phrase){
                 if(!variants.empty()&&!seen.insert({row.text,row.cover}).second)return;
                 auto candidate=std::make_shared<WetypeCandidate>(start,row,ticket,id,mode_id);
+                // Use the same candidate type as Rime's user-table translator,
+                // so standard simplifier/excluded_types can preserve literals.
+                if(custom_phrase)candidate->set_type("user_table");
                 if(!is_fuzzy&&phrase_priority(row))candidate->set_quality(user_words.initial_quality);
-                if(is_fuzzy){candidate->set_type("wetype_fuzzy");candidate->set_comment("模糊");}
+                if(is_fuzzy){if(!custom_phrase)candidate->set_type("wetype_fuzzy");candidate->set_comment("模糊");}
                 out->Append(candidate);
             };
             // Custom phrases precede the first three ordinary exact candidates,
             // followed by bounded fuzzy choices.
             // Each branch owns a separate native session and selection ticket.
             size_t head=variants.empty()?result.rows.size():std::min<size_t>(phrases+3,result.rows.size());
-            for(size_t i=0;i<head;++i)append(result.rows[i],result.ticket,session,false);
+            for(size_t i=0;i<head;++i)append(result.rows[i],result.ticket,session,false,configured_phrase(result.rows[i],input));
             ctx->set_property("_wetype_fuzzy_variants",std::to_string(variants.size()));
             for(size_t i=0;i<variants.size();++i){
                 try{
@@ -214,13 +220,14 @@ class Translator:public rime::Translator {
                         // Only complete branch matches are exposed. Partial
                         // selection continues through the untouched native path.
                         if(row.cover!=variants[i].size())continue;
+                        bool custom_phrase=configured_phrase(row,variants[i]);
                         row.cover=input.size();row.preedit=input;
-                        append(row,alternative.ticket,fuzzy_sessions[i],true);
+                        append(row,alternative.ticket,fuzzy_sessions[i],true,custom_phrase);
                         if(++count==3)break;
                     }
                 }catch(const std::exception &e){ctx->set_property("_wetype_fuzzy_error",e.what());}
             }
-            for(size_t i=head;i<result.rows.size();++i)append(result.rows[i],result.ticket,session,false);
+            for(size_t i=head;i<result.rows.size();++i)append(result.rows[i],result.ticket,session,false,configured_phrase(result.rows[i],input));
             engine_->context()->set_property("_wetype_error","");
         }catch(const std::exception &e){
             error(e);out->Append(std::make_shared<rime::SimpleCandidate>("wetype_error",start,end,input,"引擎暂不可用，回车保留原文"));

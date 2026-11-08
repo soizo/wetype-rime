@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Preserve custom_phrase text through OpenCC using Rime's standard user_table candidate type and excluded_types setting, including both mainland conversion stages and phrases with priority disabled. Ordinary engine output still follows script conversion.
+
 - Fix custom-phrase priority disappearing after deployment when one code falls outside the native input alphabet. Skip those codes individually, preserve the source table and report a local count; cover table edits and redeployment without restarting librime.
 
 - Prioritise exact native custom_phrase matches with the conventional initial_quality setting and row weights, preserving native selection/deletion identifiers and batched input.

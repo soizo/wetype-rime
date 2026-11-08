@@ -72,6 +72,7 @@ def main():
     if args.feature == 'mainland':
         from wetype.integration import DEFAULT_RIME
         shutil.copytree(DEFAULT_RIME / 'opencc', user / 'opencc')
+        (user / 'custom_phrase.txt').write_text('简体原文\tcpraw\t50\n兌換原文\tcptrad\t50\n')
     (user / 'default.custom.yaml').write_text('patch:\n  schema_list:\n    - schema: ' + schema + '\n')
     print('Isolated configuration fixture:', base, flush=True)
 
@@ -140,6 +141,8 @@ def main():
             # 左 Shift 切换到大陆繁体；右 Shift 标点与全角空格。
             assert key(session, 65505, 0), 'left Shift toggle rejected'
             expect(code, '中國')
+            expect('cpraw', '简体原文')
+            expect('cptrad', '兌換原文')
             assert key(session, 65505, 0), 'left Shift toggle rejected'
             expect(code, '中国')
             def expect_keys(keys, expected):
@@ -244,6 +247,8 @@ def main():
         if 'traditional' in features:
             option(session, b'wetype_traditional', 1)
             expect('zhongguo', '中國')
+            if 'phrases' in features:
+                expect('myphrase', '我的自定义短语')
             if 'force' in features:
                 expect('myname', '自定義姓名')
             option(session, b'wetype_traditional', 0)

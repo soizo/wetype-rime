@@ -19,6 +19,9 @@ struct RimeUserWords {
     std::map<std::pair<std::string,std::string>,int> weights;
     double initial_quality=99;
     size_t skipped_codes=0;
+    bool contains(const std::string &code,const std::string &text) const {
+        return weights.count({code,text})!=0;
+    }
     std::optional<int> priority(const std::string &code,const std::string &text) const {
         if(initial_quality<=0)return {};
         auto at=weights.find({code,text});

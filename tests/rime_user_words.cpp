@@ -99,10 +99,12 @@ int main(int argc,char **argv){
         std::ofstream personal(std::string(argv[1])+"/用户短语.txt");
         personal<<"自选词表\tunicodeword\t10\n";personal.close();
         settings.open(std::string(argv[1])+"/wetype.custom.yaml");
-        settings<<"patch:\n  custom_phrase/user_dict: 用户短语\n  custom_phrase/initial_quality: 0\n";settings.close();
+        settings<<"patch:\n  custom_phrase/user_dict: 用户短语\n  custom_phrase/initial_quality: 0\n  engine/filters: [simplifier@traditional, uniquifier]\n  traditional:\n    option_name: wetype_traditional\n    opencc_config: s2t.json\n    excluded_types: [user_table]\n";settings.close();
         api->initialize(&traits);api->start_maintenance(true);api->join_maintenance_thread();
         id=api->create_session();require(api->select_schema(id,"wetype"),"personal table patch failed");api->set_option(id,"ascii_mode",false);
+        api->set_option(id,"wetype_traditional",true);
         require(find(rows(id,"unicodeword"),"自选词表")>0,"zero initial_quality still promoted custom phrase");
+        require(rows(id,"zhongguo")[0]=="中國","ordinary candidates bypassed OpenCC");
         api->clear_composition(id);api->destroy_session(id);api->finalize();
         settings.open(std::string(argv[1])+"/wetype.custom.yaml");
         settings<<"patch:\n  custom_phrase/db_class: unsupported\n";settings.close();
@@ -118,9 +120,10 @@ int main(int argc,char **argv){
         table.open(std::string(argv[1])+"/custom_phrase.txt");
         table<<"原生配置词\twtrime\t10\nRime短语\trr\t999\n";table.close();
         settings.open(std::string(argv[1])+"/wetype.custom.yaml");
-        settings<<"patch:\n  \"engine/translators/@before 0\": table_translator@custom_phrase\n  engine/filters: [uniquifier]\n  custom_phrase/initial_quality: 1000\n  custom_phrase/enable_completion: false\n  custom_phrase/enable_sentence: false\n";settings.close();
+        settings<<"patch:\n  \"engine/translators/@before 0\": table_translator@custom_phrase\n  engine/filters: [simplifier@traditional, uniquifier]\n  traditional:\n    option_name: wetype_traditional\n    opencc_config: s2t.json\n    excluded_types: [user_table]\n  custom_phrase/initial_quality: 1000\n  custom_phrase/enable_completion: false\n  custom_phrase/enable_sentence: false\n";settings.close();
         api->initialize(&traits);api->start_maintenance(true);api->join_maintenance_thread();
         id=api->create_session();require(api->select_schema(id,"wetype"),"official table translator unavailable");api->set_option(id,"ascii_mode",false);
+        api->set_option(id,"wetype_traditional",true);
         find(rows(id,"rr"),"Rime短语");
         RIME_STRUCT(RimeContext,view);require(api->get_context(id,&view),"missing custom phrase context");
         require(view.menu.num_candidates&&std::string(view.menu.candidates[0].text)=="Rime短语","Rime phrase weight ignored");api->free_context(&view);

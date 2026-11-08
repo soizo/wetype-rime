@@ -11,3 +11,4 @@ patch:
     option_name: wetype_traditional
     opencc_config: s2t.json
     tips: none
+    excluded_types: [user_table]

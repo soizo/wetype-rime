@@ -41,6 +41,21 @@ Edit the table or the scheme's `.custom.yaml`, then use Squirrel's **Deploy** co
 
 If you prefer to keep configuration in the checkout, `python3 -m wetype sync-config` copies `rime/` files before deployment. Personal text tables in that directory are ignored by Git. Destination-only personal files are preserved.
 
+## Literal output and OpenCC
+
+Configured native phrases use Rime's standard `user_table` candidate type, independently of their priority. The supplied mainland scheme and traditional-output example exclude that type from OpenCC, so custom phrases retain exactly the text in the table whilst ordinary engine candidates follow the selected script conversion. This also works with `initial_quality: 0` and with the optional official phrase translator.
+
+When adding another Rime `simplifier`, give each conversion namespace the usual exclusion, for example:
+
+```yaml
+traditionalize:
+  option_name: traditionalization
+  opencc_config: s2t.json
+  excluded_types: [user_table]
+```
+
+Selection learning and deletion continue to use the original native candidate identifiers.
+
 ## Optional Rime phrase translator
 
 The usual `table_translator@custom_phrase` remains available. Adding it to `engine/translators` hands that namespace to the official Rime translator, including its `initial_quality`, completion and sentence options. WeTypeRime then stops importing that table into the native store, so it is not processed by two backends. See the [phrase example](../examples/rime-extensions/phrases/wetype.custom.yaml).

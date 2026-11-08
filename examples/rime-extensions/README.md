@@ -28,6 +28,8 @@
 
 将 `traditional/wetype.custom.yaml` 放到 `rime/wetype.custom.yaml`。重新部署后，方案选项菜单会出现“简体 / 繁體”，默认简体，打开繁体时使用 OpenCC 的 `s2t.json` 转换候选输出。需要鼠须管提供对应 OpenCC 配置和数据。过滤器转换的是候选文字，原生引擎的学习反馈仍引用原候选。
 
+The example excludes `user_table` through Rime's standard `excluded_types` setting, preserving custom phrases verbatim for both native WeType and official Rime phrase candidates.
+
 ## 同时启用或用于其他方案
 
 各功能目录中的 `wetype.custom.yaml` 是独立示例，不要依次覆盖同一个文件。要组合使用，将所需条目合并进同一个 `patch:` 映射，避免重复键；多个开关应合并为一次列表追加。强制替换过滤器放在繁简转换之前，使固定输出也能按需转为繁体。

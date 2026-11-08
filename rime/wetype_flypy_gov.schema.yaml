@@ -42,11 +42,13 @@ __patch:
     opencc_config: s2t.json
     tips: none
     tags: [abc]
+    excluded_types: [user_table]
   gov_traditional:
     option_name: traditionalization
     opencc_config: govrime_t2gov_keep_simp.json
     tips: none
     tags: [abc]
+    excluded_types: [user_table]
   # 沿用当前 Rime 的标点配置（包括个人 default.custom.yaml 中的修改）。
   punctuator:
     __include: default:/punctuator

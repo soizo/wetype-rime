@@ -23,6 +23,8 @@ python3 -m wetype sync-config
 
 大陆定制方案属于可选方案，不自动加入基础 12 方案的菜单。要使用，在 Rime 的 `default.custom.yaml` 中 `schema_list` 下增加 `- schema: wetype_flypy_gov` 后重新部署。它复用 WeType 小鹤输入和已有学习数据，没有挂载雾凇词库、英文词库或依赖雾凇内部结构的纠错/辅码 Lua。
 
+Both mainland OpenCC stages use `excluded_types: [user_table]`. Custom phrases keep their literal text through script and glyph conversion, including when phrase priority is disabled. Other engine candidates continue to follow the script switch.
+
 同步范围是本目录顶层的 YAML、TXT 和 `lua/` 下直接存放的 Lua 文件；不会自动同步 `examples/`。项目内同名文件是配置来源，目标中有差异的旧文件会备份到项目 `.local/backups/config-*`。只在目标目录存在的个人文件会保留。不要编辑目标 `build/` 里的部署产物。
 
 `wetype.runtime.yaml` 只在安装目标生成，保存引擎启动器、接口模块和日志的路径。各方案通过 `wetype.runtime:/wetype` 引用这些路径，本目录不能放同名文件。只改 YAML 不需要重新提取引擎或编译接口。
