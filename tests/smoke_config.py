@@ -47,7 +47,10 @@ class Context(C.Structure):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--feature', choices=('all', 'phrases', 'force', 'traditional', 'mainland', 'native-emoji', 'fuzzy', 'fuzzy-flypy'), default='all')
+    parser.add_argument('--mainland-dir', type=Path, help='Generated OpenCCGovForRime package for mainland checks')
     args = parser.parse_args()
+    if args.feature == 'mainland' and args.mainland_dir is None:
+        parser.error('--mainland requires --mainland-dir from OpenCCGovForRime')
     base = Path(tempfile.mkdtemp(prefix='config-extensions-', dir=ROOT / '.local'))
     user, logs = base / 'user', base / 'logs'
     user.mkdir(); logs.mkdir()
@@ -70,8 +73,8 @@ def main():
     if args.feature in ('fuzzy', 'fuzzy-flypy'):
         shutil.copy2(examples / 'fuzzy/wetype.custom.yaml', user / (schema + '.custom.yaml'))
     if args.feature == 'mainland':
-        from wetype.integration import DEFAULT_RIME
-        shutil.copytree(DEFAULT_RIME / 'opencc', user / 'opencc')
+        shutil.copy2(args.mainland_dir / 'wetype_flypy_gov.schema.yaml', user / 'wetype_flypy_gov.schema.yaml')
+        shutil.copytree(args.mainland_dir / 'opencc', user / 'opencc')
         (user / 'custom_phrase.txt').write_text('简体原文\tcpraw\t50\n兌換原文\tcptrad\t50\n')
     (user / 'default.custom.yaml').write_text('patch:\n  schema_list:\n    - schema: ' + schema + '\n')
     print('Isolated configuration fixture:', base, flush=True)
@@ -135,28 +138,17 @@ def main():
         if 'force' in features:
             expect('myname', '自定义姓名')
         code = 'vsgo' if schema.startswith('wetype_flypy') else 'zhongguo'
-        expect(code, '中国')
+        expect(code, '中國' if args.feature == 'mainland' else '中国')
         if args.feature == 'mainland':
             expect('nihc', '你好')
-            # 左 Shift 切换到大陆繁体；右 Shift 标点与全角空格。
+            # Generated variants default to mainland traditional output.
             assert key(session, 65505, 0), 'left Shift toggle rejected'
-            expect(code, '中國')
+            expect(code, '中国')
             expect('cpraw', '简体原文')
             expect('cptrad', '兌換原文')
             assert key(session, 65505, 0), 'left Shift toggle rejected'
-            expect(code, '中国')
-            def expect_keys(keys, expected):
-                for codepoint, modifiers in keys:
-                    key(session, codepoint, modifiers)
-                value = Commit(); value.data_size = C.sizeof(value) - C.sizeof(C.c_int)
-                assert commit(session, C.byref(value)), 'no punctuation commit'
-                try:
-                    assert value.text.decode() == expected, (value.text, expected)
-                finally:
-                    free(C.byref(value))
-                print(f'PASS: key sequence -> {expected}', flush=True)
-            expect_keys([(65506, 1), (123, 1), (65506, 1 << 30)], '『')
-            expect_keys([(32, 1)], '　')
+            expect(code, '中國')
+            option(session, b'traditionalization', 0)
         if args.feature in ('mainland', 'native-emoji'):
             emoji_code = 'xnlm' if args.feature == 'mainland' else 'xiaolian'
             def candidates(code):

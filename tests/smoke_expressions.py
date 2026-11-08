@@ -1,9 +1,12 @@
 """Check native local expressions and editable tables through real librime."""
 from pathlib import Path
-import subprocess,sys,uuid
+import argparse,shutil,subprocess,sys,uuid
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from wetype.integration import ROOT,build,stage,SQUIRREL,DEFAULT_SOURCE
 from fixture_cleanup import compact
+parser=argparse.ArgumentParser(description=__doc__)
+parser.add_argument('--mainland-dir',type=Path,required=True,help='Generated OpenCCGovForRime package')
+args=parser.parse_args()
 build()
 base=ROOT/'.local'/('expressions-acceptance-'+uuid.uuid4().hex[:8]);stage(base/'user',base/'runtime',copy_engine=False);(base/'logs').mkdir()
 encode=lambda s:s.encode().hex() or '-'
@@ -63,6 +66,8 @@ with (rime/'logs/acceptance.log').open('w') as log:
  result=subprocess.run([str(binary),str(user),str(rime/'logs')],stdout=log,stderr=subprocess.STDOUT,timeout=120)
 print((rime/'logs/acceptance.log').read_text()[-2500:]);result.check_returncode()
 gov=base/'rime-gov';stage(gov/'user',gov/'runtime',copy_engine=False);(gov/'logs').mkdir()
+shutil.copy2(args.mainland_dir/'wetype_flypy_gov.schema.yaml',gov/'user/wetype_flypy_gov.schema.yaml')
+shutil.copytree(args.mainland_dir/'opencc',gov/'user/opencc')
 (gov/'user/default.custom.yaml').write_text('patch:\n  schema_list:\n    - schema: wetype_flypy_gov\n')
 (gov/'user/wetype_flypy_gov.custom.yaml').write_text(patch)
 (gov/'user/kaomoji.txt').write_text('后(๑•̀ㅂ•́)و✧\tuukao\t100\n第二个颜文字\tuukao\t10\n')
