@@ -42,11 +42,20 @@ int main(int argc,char **argv){
             std::string code=std::string(schema).find("wubi")!=std::string::npos?"wu":"wtrime";
             std::string word=code=="wu"?"五笔用户词":"引擎用户词";
             auto menu=rows(id,code);auto index=find(menu,word);
+            require(menu[0]==(code=="wu"?"首选五笔词":"高权重用户词"),"custom_phrase weight did not promote native candidate");
+            require(index==1,"lower-weight custom phrase did not precede ordinary candidates");
             require(api->select_candidate_on_current_page(id,index),"cannot select configured native word");
             require(committed(id)==word,"configured word commit mismatch");
             printf("PASS native user word and selection in %s\n",schema);
         }
+        require(api->select_schema(id,"wetype_quanpin"),"cannot select fuzzy scheme");api->set_option(id,"ascii_mode",false);
+        api->set_option(id,"wetype_fuzzy",true);
+        require(rows(id,"qin")[0]=="精准短语","fuzzy candidates preceded exact custom phrase");
+        require(std::stoi(property(id,"_wetype_fuzzy_variants"))>0,"fuzzy branch not exercised");
         require(api->select_schema(id,"wetype"),"cannot select wetype");api->set_option(id,"ascii_mode",false);
+        rows(id,"wtrime");require(api->process_key(id,'1',0),"number selection failed");
+        require(committed(id)=="高权重用户词","promoted row selected the wrong native index");
+        require(property(id,"_wetype_error").empty(),"promoted selection lost native feedback");
         auto skipped=rows(id,"negword");
         require(std::find(skipped.begin(),skipped.end(),"禁用用户词")==skipped.end(),"negative table weight imported");
         auto menu=rows(id,"wtrime");size_t index=find(menu,"引擎用户词");
@@ -63,7 +72,7 @@ int main(int argc,char **argv){
         table<<"# Edited Rime source\n引擎替换词\twtrime\t20\n";table.close();
         api->initialize(&traits);api->start_maintenance(true);api->join_maintenance_thread();
         id=api->create_session();require(api->select_schema(id,"wetype"),"reload failed");api->set_option(id,"ascii_mode",false);
-        menu=rows(id,"wtrime");find(menu,"引擎替换词");
+        menu=rows(id,"wtrime");require(find(menu,"引擎替换词")==0,"edited custom phrase not promoted");
         require(std::find(menu.begin(),menu.end(),"引擎用户词")==menu.end(),"old source term returned after update");
         api->clear_composition(id);api->destroy_session(id);api->finalize();
         std::ofstream settings(std::string(argv[1])+"/wetype.custom.yaml");
@@ -77,10 +86,10 @@ int main(int argc,char **argv){
         std::ofstream personal(std::string(argv[1])+"/用户短语.txt");
         personal<<"自选词表\tunicodeword\t10\n";personal.close();
         settings.open(std::string(argv[1])+"/wetype.custom.yaml");
-        settings<<"patch:\n  custom_phrase/user_dict: 用户短语\n";settings.close();
+        settings<<"patch:\n  custom_phrase/user_dict: 用户短语\n  custom_phrase/initial_quality: 0\n";settings.close();
         api->initialize(&traits);api->start_maintenance(true);api->join_maintenance_thread();
         id=api->create_session();require(api->select_schema(id,"wetype"),"personal table patch failed");api->set_option(id,"ascii_mode",false);
-        find(rows(id,"unicodeword"),"自选词表");
+        require(find(rows(id,"unicodeword"),"自选词表")>0,"zero initial_quality still promoted custom phrase");
         api->clear_composition(id);api->destroy_session(id);api->finalize();
         settings.open(std::string(argv[1])+"/wetype.custom.yaml");
         settings<<"patch:\n  custom_phrase/db_class: unsupported\n";settings.close();

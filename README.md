@@ -128,7 +128,7 @@ The optional [`WeType小鹤大陆` variant](rime/wetype_flypy_gov.schema.yaml) i
 
 Optional fuzzy spelling uses Rime's own `speller/algebra` through the adapter, with editable rules in [`rime/wetype_fuzzy.yaml`](rime/wetype_fuzzy.yaml); WeType's fuzzy options stay disabled. Full pinyin and Xiaohe are supported, with `in / ing` as the initial rules. The mainland Xiaohe variant enables this by default and exposes an on/off switch. Other base schemes can opt in using the [fuzzy example](examples/rime-extensions/fuzzy/wetype.custom.yaml). See the [configuration guide](rime/README.md#rime-模糊音) for input and candidate limits.
 
-[User-word management](docs/user-words.md) uses the scheme's ordinary `custom_phrase` section and Rime text-table format. Reuse `custom_phrase.txt`, or select another table with `custom_phrase/user_dict` in a normal `*.custom.yaml` patch, then deploy. Entries are managed in WeType's native store, with native candidate ranking, learning and Rime's Control + Delete candidate action. An explicitly configured `table_translator@custom_phrase` instead owns that table through the official Rime backend.
+[User-word management](docs/user-words.md) uses the scheme's ordinary `custom_phrase` section and Rime text-table format. Reuse `custom_phrase.txt`, or select another table with `custom_phrase/user_dict` in a normal `*.custom.yaml` patch, then deploy. Exact engine-generated phrase matches are prioritised with `custom_phrase/initial_quality: 99` and ordered by their text-table weights. Entries, selection learning and candidate deletion remain in WeType's native store. An explicitly configured `table_translator@custom_phrase` instead owns that table through the official Rime backend.
 
 ## Input Modes
 

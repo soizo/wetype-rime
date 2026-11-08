@@ -176,17 +176,33 @@ class Translator:public rime::Translator {
                 context_sampled=true;
             }
             auto result=host->query(session,input,before_text);active=true;
+            // Promote only exact, full-coverage rows actually returned by the
+            // engine. Preserve their original indices for native feedback.
+            const bool prioritise=words_valid&&ctx->get_property("_wetype_user_words_error").empty();
+            auto phrase_priority=[&](const Row &row)->std::optional<int>{
+                if(!prioritise||row.cover!=input.size())return {};
+                return user_words.priority(input,row.text);
+            };
+            size_t phrases=0;
+            for(const auto &row:result.rows)if(phrase_priority(row))++phrases;
+            if(phrases)std::stable_sort(result.rows.begin(),result.rows.end(),[&](const Row &a,const Row &b){
+                auto left=phrase_priority(a),right=phrase_priority(b);
+                if(bool(left)!=bool(right))return bool(left);
+                return left&&right&&*left>*right;
+            });
             auto variants=fuzzy_enabled&&ctx->get_property("_wetype_fuzzy_error").empty()?fuzzy.variants(input):std::vector<string>{};
             std::set<std::pair<string,size_t>> seen;
             auto append=[&](const Row &row,uint64_t ticket,uint64_t id,bool is_fuzzy){
                 if(!variants.empty()&&!seen.insert({row.text,row.cover}).second)return;
                 auto candidate=std::make_shared<WetypeCandidate>(start,row,ticket,id,mode_id);
+                if(!is_fuzzy&&phrase_priority(row))candidate->set_quality(user_words.initial_quality);
                 if(is_fuzzy){candidate->set_type("wetype_fuzzy");candidate->set_comment("模糊");}
                 out->Append(candidate);
             };
-            // Keep the first three exact candidates, then bounded fuzzy choices.
+            // Custom phrases precede the first three ordinary exact candidates,
+            // followed by bounded fuzzy choices.
             // Each branch owns a separate native session and selection ticket.
-            size_t head=variants.empty()?result.rows.size():std::min<size_t>(3,result.rows.size());
+            size_t head=variants.empty()?result.rows.size():std::min<size_t>(phrases+3,result.rows.size());
             for(size_t i=0;i<head;++i)append(result.rows[i],result.ticket,session,false);
             ctx->set_property("_wetype_fuzzy_variants",std::to_string(variants.size()));
             for(size_t i=0;i<variants.size();++i){
@@ -242,6 +258,7 @@ public:
             if(own->session!=session&&std::find(fuzzy_sessions.begin(),fuzzy_sessions.end(),own->session)==fuzzy_sessions.end())return;
             try{
                 host->command("DELETE "+std::to_string(own->session)+" "+std::to_string(own->ticket)+" "+std::to_string(own->index));
+                user_words.weights.erase({c->input().substr(own->start(),own->end()-own->start()),own->text()});
                 c->set_property("_wetype_delete_error","");
                 c->RefreshNonConfirmedComposition();
             }catch(const std::exception &e){c->set_property("_wetype_delete_error",e.what());}

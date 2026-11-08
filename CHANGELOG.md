@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Prioritise exact native custom_phrase matches with the conventional initial_quality setting and row weights, preserving native selection/deletion identifiers and batched input.
+
 - Use the conventional custom_phrase configuration and existing Rime text tables; remove the separate user-word settings file. Respect an explicitly configured official phrase translator and inherit default key bindings and recogniser rules.
 
 - Manage native WeType user words through Rime's official stabledb text tables, with source-scoped updates and removals, local storage and standard candidate-deletion notifications.

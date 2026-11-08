@@ -1,6 +1,6 @@
 # User words and custom phrases
 
-Configure phrases in the scheme's ordinary `custom_phrase` section, and make personal changes in `<schema_id>.custom.yaml`. The text table uses Rime's existing format. WeTypeRime reads it with librime's official `stabledb` component and sends the entries to WeType's native user-word store. Candidates, ranking and selection learning come from WeType.
+Configure phrases in the scheme's ordinary `custom_phrase` section, and make personal changes in `<schema_id>.custom.yaml`. The text table uses Rime's existing format. WeTypeRime reads it with librime's official `stabledb` component and sends the entries to WeType's native user-word store. Candidates and selection learning come from WeType; exact custom-phrase matches receive the configured priority.
 
 ## Configuration
 
@@ -11,6 +11,7 @@ custom_phrase:
   dictionary: ""
   user_dict: custom_phrase
   db_class: stabledb
+  initial_quality: 99
 ```
 
 This reads `custom_phrase.txt` from the Rime user directory (`~/Library/Rime/` on Squirrel). An existing file can be reused without conversion. The adapter only reads the file; it does not rewrite it. There is no separate shared user-word YAML file to maintain.
@@ -32,7 +33,9 @@ Use UTF-8 text with a literal Tab between fields:
 自定义短语	zi ding yi duan yu
 ```
 
-The columns are phrase, input code and optional weight. Lines beginning with `#` are comments. Codes represent literal keys; spaces between syllables are removed before native import. A double-pinyin shortcut should use that layout's keys. Negative weights exclude a row. Other weights are parsed by Rime, whilst WeType decides native candidate positions.
+The columns are phrase, input code and optional weight. Lines beginning with `#` are comments. Codes represent literal keys; spaces between syllables are removed before native import. A double-pinyin shortcut should use that layout's keys. Negative weights exclude a row. Exact custom phrases returned by the engine appear before ordinary and fuzzy candidates, with larger row weights first and native ordering for ties. Prefix matches retain their native order.
+
+`custom_phrase/initial_quality` defaults to `99` and also supplies the promoted candidates' Rime quality. Override it in the scheme's `.custom.yaml` as usual. Set it to `0` or below to retain native ordering. Reordering preserves the engine's original selection identifiers, so number keys, selection learning and candidate deletion still reach the correct native word.
 
 Edit the table or the scheme's `.custom.yaml`, then use Squirrel's **Deploy** command. Changes made directly in the Rime user directory need no project command. Finish or cancel an existing composition first. A [commented template](../examples/rime-extensions/user-words/custom_phrase.txt) is supplied for new files; do not replace an existing personal table with it.
 
@@ -42,7 +45,7 @@ If you prefer to keep configuration in the checkout, `python3 -m wetype sync-con
 
 The usual `table_translator@custom_phrase` remains available. Adding it to `engine/translators` hands that namespace to the official Rime translator, including its `initial_quality`, completion and sentence options. WeTypeRime then stops importing that table into the native store, so it is not processed by two backends. See the [phrase example](../examples/rime-extensions/phrases/wetype.custom.yaml).
 
-The native path does not claim to implement those additional table-translator options. The ordinary WeType candidates and their learning continue through the native engine when the optional Rime translator is used.
+The native path honours `initial_quality` and exact-match row weights. Completion and sentence-generation settings belong to the optional official table translator. Ordinary WeType candidates and their learning continue through the native engine when that translator is used.
 
 ## Removal and learning
 

@@ -69,3 +69,4 @@ custom_phrase:
   dictionary: ""
   user_dict: custom_phrase
   db_class: stabledb
+  initial_quality: 99

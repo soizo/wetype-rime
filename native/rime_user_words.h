@@ -3,7 +3,10 @@
 #include <rime/dict/db.h>
 #include <rime/dict/user_db.h>
 #include <algorithm>
+#include <cmath>
+#include <map>
 #include <memory>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -13,8 +16,17 @@ namespace wetype {
 struct RimeUserWords {
     std::string source;
     std::vector<std::pair<std::string,std::string>> entries;
+    std::map<std::pair<std::string,std::string>,int> weights;
+    double initial_quality=99;
+    std::optional<int> priority(const std::string &code,const std::string &text) const {
+        if(initial_quality<=0)return {};
+        auto at=weights.find({code,text});
+        return at==weights.end()?std::optional<int>():at->second;
+    }
     void load(rime::Config *config){
-        source.clear();entries.clear();
+        source.clear();entries.clear();weights.clear();initial_quality=99;
+        config->GetDouble("custom_phrase/initial_quality",&initial_quality);
+        if(!std::isfinite(initial_quality))throw std::runtime_error("invalid custom_phrase initial_quality");
         std::string name,db_class="stabledb";
         if(!config->GetString("custom_phrase/user_dict",&name)||name.empty())return;
         config->GetString("custom_phrase/db_class",&db_class);
@@ -50,12 +62,14 @@ struct RimeUserWords {
             if(separator==std::string::npos)throw std::runtime_error("invalid Rime user-word record");
             auto code=key.substr(0,separator),text=key.substr(separator+1);
             code.erase(std::remove(code.begin(),code.end(),' '),code.end());
-            if(rime::UserDbValue(value).commits<0)continue;
+            int weight=rime::UserDbValue(value).commits;
+            if(weight<0)continue;
             bytes+=code.size()+text.size();
             if(code.empty()||code.size()>128||text.empty()||text.size()>4096||text.find('\0')!=std::string::npos||
                code.find_first_not_of("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';")!=std::string::npos||
                entries.size()>=2048||bytes>2*1024*1024)
                 throw std::runtime_error("invalid or oversized Rime user-word table");
+            weights[{code,text}]=weight;
             entries.emplace_back(std::move(code),std::move(text));
         }
     }
