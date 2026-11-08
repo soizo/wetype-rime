@@ -10,7 +10,6 @@ Install the native component once, then configure these schemes in the Rime user
 | `wetype_*.schema.yaml` | Standalone pinyin, double-pinyin and Wubi schemes |
 | `wetype_common.yaml` | Shared processors, translators, keys, phrase settings and extension defaults |
 | `wetype_fuzzy.yaml` | Rime spelling algebra and Xiaohe mappings |
-| `wetype_flypy_gov.schema.yaml` | Optional 微信小鹤大陆 variant |
 | `lua/` | Native-module loader and optional Lua extensions |
 | `wetype/installation.yaml` | Generated module, launcher and diagnostic paths |
 | `wetype/` | Local engine, binary dictionaries, adapter and learning data |
@@ -39,11 +38,62 @@ patch:
 
 A scheme's own patch takes precedence over shared defaults. The unified scheme's patch remains `wetype.custom.yaml`; it does not affect the standalone schemes. Do not edit the generated `build/` files or `wetype/installation.yaml` for personal settings.
 
+## Menu and configuration preferences
+
+Keep Chinese/English, script conversion, full-width/half-width, punctuation and
+Emoji in the menu where the scheme provides them. Fuzzy spelling, kaomoji,
+symbol expressions, Wubi pinyin assistance and Wubi code comments use hidden
+Rime switches. They retain their current defaults and option names; omitting
+`states` hides them from the menu without disabling the feature.
+
+Change a hidden switch's `reset` to `1` (enabled) or `0` (disabled) in a personal
+scheme patch, then deploy. Rime list indices are zero-based. For the generated
+mainland Xiaohe scheme with the supplied personal expression patch:
+
+```yaml
+patch:
+  switches/@5/reset: 0  # Fuzzy spelling: precise input by default.
+  switches/@6/reset: 1  # Kaomoji.
+  switches/@7/reset: 1  # Symbol expressions.
+```
+
+Merge these into `wetype_flypy_gov.custom.yaml`. If personal patches change the
+switch order, check `build/wetype_flypy_gov.schema.yaml` for the current indices;
+edit only the personal patch, not that generated file. In the unified scheme
+and standalone Wubi schemes, indices `1` and `2` control pinyin assistance and
+code comments respectively. Both default to `1`. Optional expression and fuzzy
+examples show the named hidden switches and their defaults.
+
+## Editor context
+
+Choose **聯想 / 獨立** (**联想 / 独立**) in a configuration file. This setting is absent from the input-method menu in every supplied scheme, including 微信小鹤大陆.
+
+| `surrounding` value | Behaviour |
+| --- | --- |
+| `true` (default) — 聯想 / 联想 | Supply bounded preceding text, following text and the selection locally to the engine to assist candidate ranking. |
+| `false` — 獨立 / 独立 | Do not read or supply editor context; ordinary input and native learning remain available. |
+
+For a single scheme, add the following entry to its existing `patch:` mapping. For example, use `wetype.custom.yaml` for 微信输入, `wetype_flypy.custom.yaml` for 微信小鹤双拼 or `wetype_flypy_gov.custom.yaml` for 微信小鹤大陆:
+
+```yaml
+patch:
+  wetype/surrounding: false
+```
+
+To choose a shared default for all supplied schemes, use `wetype_common.custom.yaml` instead:
+
+```yaml
+patch:
+  settings/surrounding: false
+```
+
+Change `false` to `true` to enable context again, then use Squirrel's **Deploy** command after either change. Per-scheme patches take precedence over the shared default. Merge these entries into an existing `patch:` mapping rather than adding a second mapping. The former `wetype_surrounding` menu switch has been removed; migrate personal patches or key bindings that used it to this file setting.
+
 ## Scheme menu
 
 Installation adds only the unified `wetype` entry on a new profile. All standalone files are installed, and existing menu choices are retained. Register selected schemes at installation with repeatable `--schema` arguments, or edit `schema_list` in `default.custom.yaml` as usual. For example, add `- schema: wetype_flypy` or `- schema: wetype_flypy_gov` to the existing list, then deploy.
 
-The mainland variant inherits Xiaohe and adds simplified/traditional switching, mainland traditional glyphs, native Emoji recommendations, fuzzy spelling and personal Shift-key punctuation. It requires the user's existing OpenCC `s2t.json`, `govrime_t2gov_keep_simp.json` and their dictionaries. Left Shift changes script; right Shift retains the mainland punctuation behaviour. Both OpenCC stages exclude `user_table`, preserving custom phrases literally. It uses native Xiaohe candidates and learning; it has no dependency on Rime Ice's translators or dictionaries.
+The optional mainland variant is generated and distributed by [OpenCCGovForRime](https://github.com/soizo/OpenCCGovForRime), using this project’s base Xiaohe scheme. Install its generated scheme and OpenCC resources separately. WetypeRime preserves an already installed mainland scheme during configuration synchronisation.
 
 ## Updating supplied configuration
 
@@ -79,6 +129,6 @@ algebra:
   - derive/ing$/in/
 ```
 
-The mainland variant offers 精准音 / 模糊音 and defaults to 精准音 (fuzzy spelling off). The other base schemes can opt in using the [fuzzy patch](../examples/rime-extensions/fuzzy/wetype.custom.yaml). Full pinyin `qin` and Xiaohe `qb` can then include `qing` candidates such as 请 with the comment 模糊. Librime performs the spelling algebra; WeType's fuzzy flags stay disabled.
+The mainland variant configures precise/fuzzy input through a hidden `wetype_fuzzy` switch and defaults to precise input (fuzzy spelling off). The other base schemes can opt in using the [fuzzy patch](../examples/rime-extensions/fuzzy/wetype.custom.yaml). Full pinyin `qin` and Xiaohe `qb` can then include `qing` candidates such as 请 with the comment 模糊. Librime performs the spelling algebra; WeType's fuzzy flags stay disabled.
 
 The original first three candidates remain ahead of deduplicated fuzzy results. Branches retain their native session, candidate identifiers and selection feedback. Fuzzy additions require complete lowercase syllables, at most 32 input characters, two fuzzy syllables per path and three expanded spellings. Branch candidates cover the full input; the original path retains partial selection. Uppercase, unsupported layouts, unrecognised syllables and longer input continue on the native path. Changing the option clears composition. Subsequent rule edits need only deployment.

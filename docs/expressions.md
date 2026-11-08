@@ -12,7 +12,7 @@ Both options start enabled when the expression patch is installed. The existing 
 its previous value. Each option rebuilds the native session and clears the
 current composition when changed, so old candidates cannot be selected after a
 switch.
-The example uses Rime's `reset: 1` switch defaults. Adjust these ordinary
+The example uses hidden Rime switches without `states`, so expression preferences do not appear in the menu. Both use `reset: 1` defaults. Adjust these ordinary
 switch defaults in the scheme patch if a different starting state is preferred.
 
 ## Enable the options in a scheme
@@ -21,8 +21,7 @@ After installing the updated adapter, merge
 [`expressions/wetype.custom.yaml`](../examples/rime-extensions/expressions/wetype.custom.yaml)
 into the target scheme's usual `.custom.yaml` file, then deploy in Squirrel.
 For the mainland Xiaohe scheme, use `wetype_flypy_gov.custom.yaml`. The supplied
-patch adds the two options and the personal-table translators. Use Rime's
-scheme options menu to turn them on or off.
+patch adds the two options and the personal-table translators. Set each hidden switch's `reset` value in the personal patch to `1` or `0`, then deploy to enable or disable it.
 
 Native built-in recommendations come from the local engine and its bundled
 resources. Selection feedback uses the original native candidate identifiers.
@@ -91,7 +90,7 @@ be added to the symbol table as literal text.
 
 ## Validation and privacy
 
-`python3 tests/smoke_expressions.py` checks native kaomoji and symbols, independent
+`python3 tests/smoke_expressions.py --mainland-dir /path/to/generated/package` checks native kaomoji and symbols, independent
 Unicode Emoji settings, double pinyin, native selection, official personal
 tables, priority, literal OpenCC output, edits, removal, deployment and live
 switches. The ABI check verifies that expression flags do not modify cloud,

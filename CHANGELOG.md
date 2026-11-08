@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Hide infrequent fuzzy-spelling, expression and Wubi assistance preferences from the menu whilst retaining Rime configuration defaults and option compatibility.
+
+- Delegate mainland Xiaohe generation and distribution to OpenCCGovForRime; retain compatibility with externally installed variants.
+
+- Move the 聯想 / 獨立 editor-context choice out of every supplied input-method menu and into the file-only `wetype/surrounding` setting. Keep context enabled by default and support shared and per-scheme overrides.
+
 - Enable kaomoji and symbol-expression switches by default in the supplied patch, and start the mainland Xiaohe scheme in precise mode whilst retaining its fuzzy toggle.
 
 - Use concise Chinese scheme names and option labels, shared Rime preset inheritance and ordinary personal patches. Keep existing schema IDs and all input features.
@@ -15,7 +21,7 @@
 
 - Convert preceding text, following text and selections to simplified Chinese through Rime's OpenCC t2s before passing context to WeType, independently of candidate-output conversion.
 
-- Extend the existing context option to pass bounded preceding text, following text and selections through the native engine fields, excluding marked composition text. Reuse the same sampling, session isolation and fuzzy-query paths; rename the visible switch to 上下文联想.
+- Pass bounded preceding text, following text and selections through the native engine fields, excluding marked composition text. Reuse the same sampling, session isolation and fuzzy-query paths.
 
 - Preserve custom_phrase text through OpenCC using Rime's standard user_table candidate type and excluded_types setting, including both mainland conversion stages and phrases with priority disabled. Ordinary engine output still follows script conversion.
 
