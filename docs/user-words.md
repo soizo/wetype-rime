@@ -1,6 +1,6 @@
 # User words and custom phrases
 
-Configure phrases in the scheme's ordinary `custom_phrase` section, and make personal changes in `<schema_id>.custom.yaml`. The text table uses Rime's existing format. WeTypeRime reads it with librime's official `stabledb` component and sends the entries to WeType's native user-word store. Candidates and selection learning come from WeType; exact custom-phrase matches receive the configured priority.
+Configure phrases in the scheme's ordinary `custom_phrase` section, and make personal changes in `<schema_id>.custom.yaml`. The text table uses Rime's existing format. The adapter reads it with librime's official `stabledb` component and sends the entries to WeType's native user-word store. Candidates and selection learning come from WeType; exact custom-phrase matches receive the configured priority.
 
 ## Configuration
 
@@ -39,7 +39,7 @@ The columns are phrase, input code and optional weight. Lines beginning with `#`
 
 Edit the table or the scheme's `.custom.yaml`, then use Squirrel's **Deploy** command. Changes made directly in the Rime user directory need no project command. Finish or cancel an existing composition first. A [commented template](../examples/rime-extensions/user-words/custom_phrase.txt) is supplied for new files; do not replace an existing personal table with it.
 
-If you prefer to keep configuration in the checkout, `python3 -m wetype sync-config` copies `rime/` files before deployment. Personal text tables in that directory are ignored by Git. Destination-only personal files are preserved.
+If you prefer to keep configuration in the checkout, `python3 -m wetype sync-config` seeds missing personal files from `data/` before deployment. Existing installed personal patches and text tables are preserved; edit those files directly after their first copy. Personal text tables in that directory are ignored by Git. Destination-only personal files are preserved.
 
 ## Literal output and OpenCC
 
@@ -58,7 +58,7 @@ Selection learning and deletion continue to use the original native candidate id
 
 ## Optional Rime phrase translator
 
-The usual `table_translator@custom_phrase` remains available. Adding it to `engine/translators` hands that namespace to the official Rime translator, including its `initial_quality`, completion and sentence options. WeTypeRime then stops importing that table into the native store, so it is not processed by two backends. See the [phrase example](../examples/rime-extensions/phrases/wetype.custom.yaml).
+The usual `table_translator@custom_phrase` remains available. Adding it to `engine/translators` hands that namespace to the official Rime translator, including its `initial_quality`, completion and sentence options. The adapter then stops importing that table into the native store, so it is not processed by two backends. See the [phrase example](../examples/rime-extensions/phrases/wetype.custom.yaml).
 
 The native path honours `initial_quality` and exact-match row weights. Completion and sentence-generation settings belong to the optional official table translator. Ordinary WeType candidates and their learning continue through the native engine when that translator is used.
 
@@ -87,7 +87,7 @@ Pins and blocks are scoped to the input layout and literal covered code. Each co
 
 These controls are independent of native learning deletion. Use the standard Control + Delete action described above to remove an accidentally learned entry. Blocking hides a candidate locally without deleting its underlying dictionary entry or learning record; restoring a block therefore does not undo a native deletion. Imported custom phrases must also be removed from their source table if they should not return after deployment.
 
-Preferences are saved in `wetype-candidates.state` in the Rime user directory, with a separate `.lock` file. Include this file in personal backups. Updates use a process lock and atomic replacement; they are shared across unified and standalone schemes using the same layout and survive session recreation and deployment. They are local adaptation rules, not native hard-fixed-position records. A pin promotes its word only when the engine returns it in the existing bounded candidate snapshot; it does not synthesise missing candidates or expand the 64-candidate limit. Blocks also apply to fuzzy candidates using their displayed input code. Ordinary official table-translator candidates are managed by that translator and are not changed by these shortcuts.
+Preferences are saved in `wetype/state/candidates` below the Rime user directory, with a separate `.lock` file. An older `wetype-candidates.state` snapshot is imported once under its original lock; the old source is retained for compatibility. Include this file in personal backups. Updates use a process lock and atomic replacement; they are shared across unified and standalone schemes using the same layout and survive session recreation and deployment. They are local adaptation rules, not native hard-fixed-position records. A pin promotes its word only when the engine returns it in the existing bounded candidate snapshot; it does not synthesise missing candidates or expand the 64-candidate limit. Blocks also apply to fuzzy candidates using their displayed input code. Ordinary official table-translator candidates are managed by that translator and are not changed by these shortcuts.
 
 Override shortcuts in a scheme patch, for example:
 

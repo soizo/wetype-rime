@@ -1,4 +1,4 @@
-#include "../native/session_options.h"
+#include "../src/session_options.h"
 #include <cstdio>
 #include <stdexcept>
 int main(){

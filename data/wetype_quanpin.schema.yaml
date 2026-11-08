@@ -1,0 +1,23 @@
+# Rime schema
+# encoding: utf-8
+
+__include: wetype_common:/base
+
+schema:
+  schema_id: wetype_quanpin
+  name: 微信拼音
+  version: "0.1"
+  description: 微信原生引擎、本地词库和学习，完全离线
+switches:
+  - name: ascii_mode
+    reset: 0
+    states: [中文, 英文]
+  - name: wetype_surrounding
+    reset: 1
+    states: [独立, 联想]
+    abbrev: [独立, 联想]
+wetype:
+  __include: wetype_common:/settings
+  mode: quanpin
+
+__patch: wetype_quanpin.custom:/patch?

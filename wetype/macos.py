@@ -235,7 +235,7 @@ def probe(engine: Path, input_text: str, state: str, select: str | None = None, 
     build = ROOT / 'build'
     build.mkdir(exist_ok=True)
     binary = build / 'wetype-probe'
-    subprocess.run(['/usr/bin/clang', '-Wall', '-Wextra', '-Werror', str(ROOT / 'native/probe.c'), '-o', str(binary)], check=True)
+    subprocess.run(['/usr/bin/clang', '-Wall', '-Wextra', '-Werror', str(ROOT / 'src/probe.c'), '-o', str(binary)], check=True)
     stamp = datetime.now().astimezone().strftime('%Y%m%d-%H%M%S') + '-' + uuid.uuid4().hex[:6]
     engine_log, crash_log = logs / f'engine-{stamp}.log', logs / f'crash-{stamp}.log'
     env = dict(os.environ)
@@ -250,7 +250,7 @@ def probe(engine: Path, input_text: str, state: str, select: str | None = None, 
     if emoji:
         env['WETYPE_EMOJI'] = '1'
     command = ['/usr/bin/sandbox-exec', '-D', f'WORK={run}', '-D', f'SOURCE={manifest["source_app"]}',
-               '-f', str(ROOT / 'native/offline.sb'), str(binary),
+               '-f', str(ROOT / 'src/offline.sb'), str(binary),
                str(engine / 'engine.bundle'), str(learning), str(table), input_text]
     try:
         with engine_log.open('w') as output:

@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Use concise Chinese scheme names and option labels, shared Rime preset inheritance and ordinary personal patches. Keep existing schema IDs and all input features.
+- Organise source under `src/` and distribution presets under `data/`. Keep installed engine resources, learning and installation metadata together in `<Rime user directory>/wetype/`; retire the generated root runtime configuration with a backup.
+- Relocate the legacy default runtime without copying live learning files, preserving old paths through a compatibility symlink. Support relative in-profile bindings, symlinked profiles and explicit external runtime directories.
+- Preserve existing personal patches and text tables during preset synchronisation. Register only the unified scheme on new profiles; retain existing standalone choices and support explicit `--schema` selection.
+
 - Add persistent candidate pinning, blocking and separate restoration shortcuts, scoped to input layout and code, whilst preserving native selection identities and learning for other candidates. Keep native learned-entry deletion separate from reversible display blocking.
 
 - Enable native Wubi pinyin assistance, remaining-code comments and wildcard code hints by default across all three variants and the unified scheme, with independent live switches and selection feedback. Allow longer pinyin composition while assistance is enabled.

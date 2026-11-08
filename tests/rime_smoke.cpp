@@ -1,4 +1,4 @@
-#include "../native/rime_text_context.h"
+#include "../src/rime_text_context.h"
 // Exercise the installed librime and its actual native component path.
 #include <rime_api.h>
 #include <dlfcn.h>
@@ -79,7 +79,7 @@ static std::vector<std::string> all_menu(RimeSessionId id){
     return rows;
 }
 static void menu_mode(RimeSessionId id,const std::string &name){
-    std::string label="输入："+name;
+    std::string label=name;
     require(api->process_key(id,0xffc1,0),"Rime options menu did not open");
     auto rows=all_menu(id);int pos=find(rows,label);
     if(pos<0){

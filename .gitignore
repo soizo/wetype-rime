@@ -29,7 +29,11 @@ SKILL.md
 .claude/
 
 # Personal configured words must not be published with the source.
-/rime/*.txt
-/rime/*.dict.yaml
-!/rime/wetype.dict.yaml
-!/rime/custom.dict.yaml
+/data/*.txt
+/data/*.dict.yaml
+!/data/wetype.dict.yaml
+!/data/custom.dict.yaml
+
+# Private installed resources must never become source files.
+/data/wetype/
+/data/*.custom.yaml

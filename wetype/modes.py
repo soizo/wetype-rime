@@ -4,6 +4,7 @@ from pathlib import Path
 
 MODES = json.loads(Path(__file__).with_name('modes.json').read_text(encoding='utf-8'))
 SCHEMAS = ['wetype'] + ['wetype_' + mode['id'] for mode in MODES]
+OPTIONAL_SCHEMAS = ['wetype_flypy_gov']
 WUBI_DICTS = {'wubi86': 'swbd86.bin', 'wubi98': 'swbd98.bin', 'wubi_new': 'swbdnc.bin'}
 SAVE_OPTIONS_PATCH = '\n  # Remember the unified wetype input mode.\n  "switcher/save_options/+": ' + json.dumps(['wetype_mode_' + m['id'] for m in MODES]) + '\n'
 

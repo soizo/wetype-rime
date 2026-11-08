@@ -1,5 +1,5 @@
 // Verify Rime's actual derive/xform implementation, without vendor resources.
-#include "../native/rime_fuzzy.h"
+#include "../src/rime_fuzzy.h"
 #include <cassert>
 #include <iostream>
 

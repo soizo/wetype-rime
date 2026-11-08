@@ -1,0 +1,31 @@
+# Rime schema
+# encoding: utf-8
+
+__include: wetype_common:/base
+
+schema:
+  schema_id: wetype_wubi_new
+  name: 微信新世纪五笔
+  version: "0.1"
+  description: 微信原生引擎、本地词库和学习，完全离线
+switches:
+  - name: ascii_mode
+    reset: 0
+    states: [中文, 英文]
+  - name: wetype_wubi_pinyin
+    reset: 1
+    states: [纯五笔, 拼音辅助]
+  - name: wetype_wubi_comment
+    reset: 1
+    states: [隐码, 显码]
+  - name: wetype_surrounding
+    reset: 1
+    states: [独立, 联想]
+    abbrev: [独立, 联想]
+wetype:
+  __include: wetype_common:/settings
+  mode: wubi_new
+  wubi_pinyin_option: wetype_wubi_pinyin
+  wubi_comment_option: wetype_wubi_comment
+
+__patch: wetype_wubi_new.custom:/patch?

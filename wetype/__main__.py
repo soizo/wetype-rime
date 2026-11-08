@@ -8,7 +8,7 @@ from .macos import DEFAULT_ENGINE, prepare, probe, verify, discover
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description='WetypeRime local engine integration tools (no network access)')
+    parser = argparse.ArgumentParser(description='Local WeType engine tools for Rime (no network access)')
     from . import __version__
     parser.add_argument('--version', action='version', version='wetype-rime ' + __version__)
     commands = parser.add_subparsers(dest='command', required=True)
@@ -27,38 +27,44 @@ def main() -> int:
     p.add_argument('--state', default='smoke', help='independent local learning state name')
     p.add_argument('--select', help='select matching candidate text and feed it back to the engine')
     p.add_argument('--emoji', action='store_true', help='enable native local Unicode Emoji recommendations')
-    from .integration import DEFAULT_RIME, DEFAULT_RUNTIME, DEFAULT_SOURCE
-    p = commands.add_parser('sync-config', help='copy project rime/ configuration without rebuilding or copying the engine')
+    from .integration import DEFAULT_RIME, DEFAULT_SOURCE
+    p = commands.add_parser('sync-config', help='copy project data/ configuration without rebuilding or copying the engine')
     p.add_argument('--rime-dir', type=Path, default=DEFAULT_RIME)
     p = commands.add_parser('install-rime', help='install the official native Rime component and isolated engine host')
     p.add_argument('--rime-dir', type=Path, default=DEFAULT_RIME)
-    p.add_argument('--runtime', type=Path, default=DEFAULT_RUNTIME)
+    p.add_argument('--runtime', type=Path, help='engine directory; defaults to <rime-dir>/wetype')
     p.add_argument('--rime-source', type=Path, default=DEFAULT_SOURCE)
     p.add_argument('--engine', type=Path, default=DEFAULT_ENGINE)
+    from .modes import SCHEMAS, OPTIONAL_SCHEMAS
+    p.add_argument('--schema', action='append', choices=[*SCHEMAS, *OPTIONAL_SCHEMAS],
+                   help='scheme to add to the menu (repeatable); defaults to wetype')
     p = commands.add_parser('disable-rime', help='disable wetype and restore the first original scheme; keep learning data')
     p.add_argument('--rime-dir', type=Path, default=DEFAULT_RIME)
-    p.add_argument('--runtime', type=Path, default=DEFAULT_RUNTIME)
+    p.add_argument('--runtime', type=Path, help='engine directory; defaults to <rime-dir>/wetype')
     args = parser.parse_args()
     try:
         if args.command == 'install-rime':
-            from .integration import build, stage, register_scheme, deploy
+            from .integration import build, stage, register_scheme, deploy, runtime_directory, migrate_runtime
             build(args.rime_source)
-            stage(args.rime_dir, args.runtime, args.engine)
-            backup = register_scheme(args.rime_dir)
-            deploy(args.rime_dir, args.runtime)
+            runtime = runtime_directory(args.rime_dir, args.runtime)
+            if args.runtime is None:
+                migrate_runtime(args.rime_dir, runtime)
+            stage(args.rime_dir, runtime, args.engine)
+            backup = register_scheme(args.rime_dir, args.schema)
+            deploy(args.rime_dir, runtime)
             print(f'已安装 wetype 到：{args.rime_dir}')
-            print(f'独立引擎与学习数据：{args.runtime}')
+            print(f'引擎与学习数据：{runtime}')
             if backup:
                 print(f'原配置备份：{backup}')
         elif args.command == 'sync-config':
             from .integration import sync_configs
             backup = sync_configs(args.rime_dir)
-            print('已同步 WeTypeRime 配置，请在鼠须管菜单中重新部署。')
+            print('已同步微信输入方案，请在鼠须管菜单中重新部署。')
             if backup:
                 print(f'原配置备份：{backup}')
         elif args.command == 'disable-rime':
-            from .integration import disable
-            backup = disable(args.rime_dir, args.runtime)
+            from .integration import disable, runtime_directory
+            backup = disable(args.rime_dir, runtime_directory(args.rime_dir, args.runtime))
             print('已停用 wetype，保留独立引擎与学习数据。请在鼠须管菜单中重新部署。')
             if backup:
                 print(f'停用前配置备份：{backup}')

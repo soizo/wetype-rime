@@ -13,7 +13,7 @@ base=ROOT/'.local'/('context-acceptance-'+uuid.uuid4().hex[:8])
 stage(base/'user',base/'runtime',copy_engine=False)
 binary=ROOT/'build/context-test-worker'
 subprocess.run(['/usr/bin/clang++','-std=c++17','-Wall','-Wextra','-Werror','-DWETYPE_CONTEXT_TEST',
-                '-I'+str(ROOT/'build/include'),str(ROOT/'native/worker.cpp'),'-o',str(binary)],check=True)
+                '-I'+str(ROOT/'build/include'),str(ROOT/'src/worker.cpp'),'-o',str(binary)],check=True)
 atomic_copy(binary,base/'runtime/bin/wetype-worker')
 p=subprocess.Popen([str(base/'runtime/bin/start-engine')],stdin=subprocess.PIPE,stdout=subprocess.PIPE,text=True)
 def read():

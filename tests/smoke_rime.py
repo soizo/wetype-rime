@@ -30,7 +30,7 @@ if args.user_profile:
     for name in ('lua','opencc','cn_dicts','en_dicts','build'):
         if (source/name).is_dir():shutil.copytree(source/name,user/name)
 stage(user,runtime,copy_engine=False)
-if args.user_profile:register_scheme(user)
+if args.user_profile:register_scheme(user, SCHEMAS)
 else:(user/'default.custom.yaml').write_text('patch:\n  schema_list:\n'+''.join('    - schema: '+schema+'\n' for schema in SCHEMAS)+SAVE_OPTIONS_PATCH)
 logs.mkdir()
 subprocess.run(['/usr/bin/clang++','-std=c++17','-fobjc-arc','-c',str(ROOT/'tests/imk_fixture.mm'),

@@ -1,4 +1,4 @@
-# 可选：将此补丁合并到 rime/wetype.custom.yaml。
+# Optional: merge this patch into wetype.custom.yaml in the Rime user directory.
 patch:
   "engine/translators/@before 0": table_translator@custom_phrase
   custom_phrase:

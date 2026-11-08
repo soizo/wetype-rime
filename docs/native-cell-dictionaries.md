@@ -1,6 +1,6 @@
 # Bundled native cell dictionaries
 
-WeTypeRime can load the binary cell dictionaries supplied with the local WeType
+The adapter can load the binary cell dictionaries supplied with the local WeType
 engine. They are **disabled by default** in all base schemes, including the
 inherited mainland Xiaohe scheme. Selection belongs in the scheme's ordinary
 `.custom.yaml` file.

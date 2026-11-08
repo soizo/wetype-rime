@@ -4,6 +4,7 @@
 #include <fstream>
 #include <set>
 #include <cstdio>
+#include "rime_paths.h"
 namespace wetype {
 // A locked, atomic local snapshot shared by schemas, sessions and module images.
 class CandidatePreferences {
@@ -14,10 +15,22 @@ class CandidatePreferences {
     std::set<std::pair<Key,string>> blocks;
 public:
     explicit CandidatePreferences(const string &mode):scope(mode){
-        file=(rime::Service::instance().deployer().user_data_dir/"wetype-candidates.state").u8string();
+        file=user_path("wetype/state/candidates");
+        std::filesystem::create_directories(std::filesystem::path(file).parent_path());
         fd=::open((file+".lock").c_str(),O_CREAT|O_RDWR,0600);
         if(fd<0||flock(fd,LOCK_EX)){if(fd>=0)close(fd);throw std::runtime_error("cannot lock candidate preferences");}
         try{
+            // Import the previous snapshot once, under its original lock.
+            auto legacy=user_path("wetype-candidates.state");
+            if(!std::filesystem::exists(file)&&std::filesystem::exists(legacy)){
+                int old=::open((legacy+".lock").c_str(),O_CREAT|O_RDWR,0600);
+                if(old<0)throw std::runtime_error("cannot open legacy candidate preferences");
+                if(flock(old,LOCK_EX)){close(old);throw std::runtime_error("cannot lock legacy candidate preferences");}
+                std::error_code ec;
+                std::filesystem::copy_file(legacy,file,ec);
+                flock(old,LOCK_UN);close(old);
+                if(ec)throw std::runtime_error("cannot migrate candidate preferences");
+            }
             std::ifstream in(file);string line;size_t count=0;
             while(std::getline(in,line)){
                 std::istringstream row(line);string tag,mode,code,text,extra;

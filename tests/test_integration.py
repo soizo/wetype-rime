@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 import subprocess
-from wetype.integration import register_scheme, disable, sync_configs
+from wetype.integration import register_scheme, disable, sync_configs, migrate_runtime, runtime_directory
 from wetype.modes import SCHEMAS, SAVE_OPTIONS_PATCH
 
 
@@ -18,13 +18,15 @@ class IsolatedBackups(unittest.TestCase):
 class ConfigSyncTests(IsolatedBackups):
     def test_copies_editable_files_and_preserves_runtime_and_personal_patches(self):
         from wetype.integration import ROOT
-        source = ROOT / 'rime'
+        source = ROOT / 'data'
         source.mkdir()
         for schema in SCHEMAS:
             (source / (schema + '.schema.yaml')).write_text('menu:\n  page_size: 6\n')
         (source / 'my.dict.yaml').write_text('name: my\nversion: "1"\n')
         (source / 'my.txt').write_text('短语\tcode\t100\n')
         (source / 'lua').mkdir()
+        (source / 'wetype_common.yaml').write_text('base: {}\nsettings: {}\n')
+        (source / 'lua/wetype_bootstrap.lua').write_text('return {}\n')
         (source / 'lua/custom.lua').write_text('return {}\n')
         target = ROOT / 'installed'
         target.mkdir()
@@ -40,12 +42,16 @@ class ConfigSyncTests(IsolatedBackups):
                 self.assertEqual((target / path.relative_to(source)).read_bytes(), path.read_bytes())
         self.assertIsNone(sync_configs(target))
         (target / 'my.dict.yaml').write_text('personal vocabulary\n')
+        (target / 'my.txt').write_text('personal phrases\n')
+        (source / 'wetype.custom.yaml').write_text('checkout patch\n')
         self.assertIsNone(sync_configs(target))
         self.assertEqual((target / 'my.dict.yaml').read_text(), 'personal vocabulary\n')
+        self.assertEqual((target / 'my.txt').read_text(), 'personal phrases\n')
+        self.assertEqual((target / 'wetype.custom.yaml').read_text(), 'personal patch\n')
 
     def test_missing_schema_does_not_partially_update_destination(self):
         from wetype.integration import ROOT
-        (ROOT / 'rime').mkdir()
+        (ROOT / 'data').mkdir()
         target = ROOT / 'installed'
         with self.assertRaisesRegex(ValueError, 'missing scheme'):
             sync_configs(target)
@@ -58,20 +64,20 @@ class RegisterSchemeTests(IsolatedBackups):
             root=Path(directory);path=root/'default.custom.yaml'
             old='patch:\n  # personal comment\n  schema_list:\n    - schema: rime_ice_gov\n    # keep this\n    - schema: vn\n  menu:\n    page_size: 8\n'
             path.write_text(old)
-            backup=register_scheme(root)
+            backup=register_scheme(root, SCHEMAS)
             self.assertEqual(backup.read_text(),old)
             changed=path.read_text().replace(SAVE_OPTIONS_PATCH,'')
             for schema in SCHEMAS:changed=changed.replace('    - schema: '+schema+'\n','')
             self.assertEqual(changed,old)
-            self.assertIsNone(register_scheme(root))
+            self.assertIsNone(register_scheme(root, SCHEMAS))
             for schema in SCHEMAS:self.assertEqual(path.read_text().splitlines().count('    - schema: '+schema),1)
 
     def test_upgrades_existing_wetype_without_duplicates(self):
         with tempfile.TemporaryDirectory() as directory:
             root=Path(directory);path=root/'default.custom.yaml'
             path.write_text('patch:\n  "schema_list/+":\n    - schema: wetype\n')
-            register_scheme(root)
-            self.assertIsNone(register_scheme(root))
+            register_scheme(root, SCHEMAS)
+            self.assertIsNone(register_scheme(root, SCHEMAS))
             for schema in SCHEMAS:self.assertEqual(path.read_text().splitlines().count('    - schema: '+schema),1)
 
     def test_unsupported_format_is_not_rewritten(self):
@@ -86,13 +92,51 @@ class RegisterSchemeTests(IsolatedBackups):
             root=Path(directory)
             self.assertIsNone(register_scheme(root))
             self.assertIn('"schema_list/+"',(root/'default.custom.yaml').read_text())
+            self.assertEqual((root/'default.custom.yaml').read_text().count('    - schema:'), 1)
+
+    def test_default_registration_keeps_existing_standalone_choices(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory)
+            (root/'default.custom.yaml').write_text('patch:\n  schema_list:\n    - schema: wetype_flypy\n')
+            register_scheme(root)
+            text=(root/'default.custom.yaml').read_text()
+            self.assertIn('schema: wetype_flypy\n',text)
+            self.assertIn('schema: wetype\n',text)
+            self.assertNotIn('schema: wetype_wubi86',text)
+
+
+class RuntimeMigrationTests(unittest.TestCase):
+    def test_directory_follows_the_selected_rime_profile(self):
+        self.assertEqual(runtime_directory(Path('/other/Rime')),Path('/other/Rime/wetype'))
+        self.assertEqual(runtime_directory(Path('/other/Rime'),Path('/engine')),Path('/engine'))
+
+    def test_moves_learning_without_copying_and_retains_legacy_paths(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory);rime=root/'Rime';legacy=root/'old';runtime=rime/'wetype'
+            legacy.mkdir();(legacy/'learning').write_bytes(b'personal learning')
+            inode=(legacy/'learning').stat().st_ino
+            with patch('wetype.integration.DEFAULT_RIME',rime),patch('wetype.integration.LEGACY_RUNTIME',legacy),patch('wetype.integration.verify'):
+                self.assertTrue(migrate_runtime(rime,runtime))
+                self.assertTrue(legacy.is_symlink())
+                self.assertEqual((runtime/'learning').stat().st_ino,inode)
+                self.assertEqual((legacy/'learning').read_bytes(),b'personal learning')
+                self.assertFalse(migrate_runtime(rime,runtime))
+
+    def test_existing_destination_and_other_profiles_are_preserved(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory);rime=root/'Rime';legacy=root/'old';legacy.mkdir()
+            with patch('wetype.integration.DEFAULT_RIME',rime),patch('wetype.integration.LEGACY_RUNTIME',legacy):
+                self.assertFalse(migrate_runtime(root/'other',root/'other/wetype'))
+                (rime/'wetype').mkdir(parents=True)
+                self.assertFalse(migrate_runtime(rime,rime/'wetype'))
+            self.assertFalse(legacy.is_symlink())
 
 class DisableSchemeTests(IsolatedBackups):
     def test_removes_all_managed_schemes_but_preserves_user_named_scheme(self):
         with tempfile.TemporaryDirectory() as directory:
             root=Path(directory);path=root/'default.custom.yaml'
             original='patch:\n  schema_list:\n    - schema: original\n    - schema: wetype_custom\n'
-            path.write_text(original+''.join('    - schema: '+schema+'\n' for schema in SCHEMAS))
+            path.write_text(original+''.join('    - schema: '+schema+'\n' for schema in SCHEMAS)+'    - schema: wetype_flypy_gov\n')
             with patch('wetype.integration.deploy'),patch('wetype.integration.subprocess.run'):
                 disable(root,root/'runtime')
             self.assertEqual(path.read_text(),original)

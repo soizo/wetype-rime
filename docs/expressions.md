@@ -1,6 +1,6 @@
 # Local expressions and personal tables
 
-WeTypeRime supports two independent native local options alongside its existing
+The adapter supports two independent native local options alongside its existing
 Unicode Emoji setting:
 
 | Option | Native behaviour |

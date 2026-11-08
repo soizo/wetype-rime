@@ -10,13 +10,39 @@ import subprocess
 import tempfile
 from datetime import datetime
 from .macos import ROOT, DEFAULT_ENGINE, verify, dictionary_rows
-from .modes import SCHEMAS, WUBI_DICTS, SAVE_OPTIONS_PATCH, native_header
+from .modes import SCHEMAS, OPTIONAL_SCHEMAS, WUBI_DICTS, SAVE_OPTIONS_PATCH, native_header
 
 SQUIRREL = Path('/Library/Input Methods/Squirrel.app/Contents')
 DEFAULT_SOURCE = Path(os.environ.get('WETYPE_RIME_SOURCE', str(ROOT / '.local/librime')))
 DEFAULT_BOOST_INCLUDE = Path(os.environ.get('WETYPE_BOOST_INCLUDE', '/opt/homebrew/include'))
-DEFAULT_RUNTIME = Path.home() / 'Library/Application Support/WetypeRime'
 DEFAULT_RIME = Path.home() / 'Library/Rime'
+DEFAULT_RUNTIME = DEFAULT_RIME / 'wetype'
+LEGACY_RUNTIME = Path.home() / 'Library/Application Support/WetypeRime'
+
+
+def runtime_directory(rime_dir: Path, runtime: Path | None = None) -> Path:
+    return runtime if runtime is not None else rime_dir / 'wetype'
+
+
+def migrate_runtime(rime_dir: Path, runtime: Path) -> bool:
+    """Relocate an existing installation without copying a live learning store.
+
+    A compatibility link keeps the paths held by an already-running frontend
+    valid until its next restart. It points at the same files and engine locks.
+    """
+    legacy = LEGACY_RUNTIME
+    if (rime_dir.resolve() != DEFAULT_RIME.resolve() or runtime.exists() or runtime.is_symlink()
+            or not legacy.is_dir() or legacy.is_symlink()):
+        return False
+    verify(legacy / 'engine')
+    runtime.parent.mkdir(parents=True, exist_ok=True)
+    legacy.rename(runtime)
+    try:
+        legacy.symlink_to(runtime.resolve(), target_is_directory=True)
+    except OSError:
+        runtime.rename(legacy)
+        raise
+    return True
 
 
 def build(source: Path = DEFAULT_SOURCE) -> None:
@@ -31,13 +57,13 @@ def build(source: Path = DEFAULT_SOURCE) -> None:
     (include / 'build_config.h').write_text('#pragma once\n')
     (out / 'include/wetype_modes.h').write_text(native_header())
     common = ['/usr/bin/clang++', '-std=c++17', '-Wall', '-Wextra', '-Werror', '-I' + str(out / 'include')]
-    subprocess.run(common + [str(ROOT / 'native/worker.cpp'), '-o', str(out / 'wetype-worker')], check=True)
-    subprocess.run(common + ['-fobjc-arc','-fvisibility=hidden','-c',str(ROOT / 'native/surrounding_text.mm'),
+    subprocess.run(common + [str(ROOT / 'src/worker.cpp'), '-o', str(out / 'wetype-worker')], check=True)
+    subprocess.run(common + ['-fobjc-arc','-fvisibility=hidden','-c',str(ROOT / 'src/surrounding_text.mm'),
                              '-o',str(out / 'surrounding_text.o')],check=True)
     subprocess.run(common + ['-Wno-unused-parameter', '-Wno-missing-field-initializers', '-fvisibility=hidden',
                             '-dynamiclib', '-undefined', 'dynamic_lookup', '-I' + str(out / 'include'),
                             '-I' + str(DEFAULT_BOOST_INCLUDE), '-isystem', str(headers), '-isystem', str(source / 'include'),
-                            str(ROOT / 'native/rime_wetype.cpp'),
+                            str(ROOT / 'src/rime_wetype.cpp'),
                             str(out / 'surrounding_text.o'),'-framework','InputMethodKit','-framework','AppKit',
                             '-o', str(out / 'librime-wetype.dylib')], check=True)
 
@@ -59,21 +85,21 @@ def atomic_copy(source: Path, target: Path) -> None:
 
 def sync_configs(rime_dir: Path) -> Path | None:
     """Copy editable configuration verbatim, keeping runtime bindings separate."""
-    source = ROOT / 'rime'
+    source = ROOT / 'data'
     required = [source / (schema + '.schema.yaml') for schema in SCHEMAS]
+    required.extend([source / 'wetype_common.yaml', source / 'lua/wetype_bootstrap.lua'])
     for path in required:
         if not path.is_file():
             raise ValueError(f'missing scheme configuration: {path}')
-    files = sorted([*source.glob('*.yaml'), *source.glob('*.txt'), *source.glob('lua/*.lua')])
+    files = sorted([*source.glob('*.yaml'), *source.glob('*.txt'), *source.glob('lua/**/*.lua')])
     if any(path.name == 'wetype.runtime.yaml' for path in files):
         raise ValueError('wetype.runtime.yaml is reserved for installation-specific bindings')
     backup = None
     for path in files:
         relative = path.relative_to(source)
         target = rime_dir / relative
-        # Optional dictionary starters become personal source files after the
-        # first installation. Never replace a user's vocabulary on an upgrade.
-        if path.name.endswith('.dict.yaml') and target.exists():
+        # Patches and vocabulary become personal files after their first copy.
+        if (path.name.endswith(('.dict.yaml', '.custom.yaml')) or path.suffix == '.txt') and target.exists():
             continue
         if target.exists():
             if target.read_bytes() == path.read_bytes():
@@ -89,9 +115,14 @@ def sync_configs(rime_dir: Path) -> Path | None:
     return backup
 
 
-def stage(rime_dir: Path, runtime: Path, engine: Path = DEFAULT_ENGINE, copy_engine: bool = True) -> None:
+def stage(rime_dir: Path, runtime: Path | None = None, engine: Path = DEFAULT_ENGINE, copy_engine: bool = True) -> None:
+    runtime = runtime_directory(rime_dir, runtime)
     rime_dir, runtime, engine = rime_dir.resolve(), runtime.resolve(), engine.resolve()
     manifest = verify(engine)
+    if copy_engine and (runtime / 'engine').exists():
+        installed = verify(runtime / 'engine')
+        if (installed['source_sha256'] != manifest['source_sha256'] or installed['files'] != manifest['files']):
+            raise ValueError('runtime contains a different engine; choose a new --runtime directory')
     runtime.mkdir(parents=True, exist_ok=True)
     for name in ('bin', 'state/logs', 'state/home', 'state/tmp', 'state/learning'):
         (runtime / name).mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -103,15 +134,10 @@ def stage(rime_dir: Path, runtime: Path, engine: Path = DEFAULT_ENGINE, copy_eng
     atomic_copy(module, runtime / 'bin' / module_name)
     if copy_engine:
         target = runtime / 'engine'
-        if target.exists():
-            installed = verify(target)
-            if (installed["source_sha256"] != manifest["source_sha256"]
-                    or installed["files"] != manifest["files"]):
-                raise ValueError("runtime contains a different engine; choose a new --runtime directory")
-        else:
+        if not target.exists():
             shutil.copytree(engine, target, symlinks=True)
         engine = target
-    atomic_copy(ROOT / 'native/offline.sb', runtime / 'offline.sb')
+    atomic_copy(ROOT / 'src/offline.sb', runtime / 'offline.sb')
     indexed = dictionary_rows(engine / 'imeData.bundle')
     cells = []
     for row in indexed:
@@ -160,20 +186,34 @@ def stage(rime_dir: Path, runtime: Path, engine: Path = DEFAULT_ENGINE, copy_eng
         target = rime_dir / name
         if not target.exists():
             atomic_copy(ROOT / 'examples/rime-extensions/expressions' / name, target)
-    settings = {'module':str(runtime / 'bin' / module_name), 'launcher':launchers['pinyin'],
-                'launchers':launchers, 'log_file':str(state / 'logs/rime.log')}
-    # Machine-specific bindings are the only generated YAML. Schemes include
-    # this node through Rime's native __include mechanism.
-    (rime_dir / 'wetype.runtime.yaml').write_text(
-        '# Generated interface paths; edit schemes in the project rime/ directory.\n'
-        + json.dumps({'wetype': settings}, ensure_ascii=False, indent=2) + '\n')
+    def binding(path: str | Path) -> str:
+        path = Path(path)
+        return path.relative_to(rime_dir).as_posix() if path.is_relative_to(rime_dir) else str(path)
+    settings = {'module':binding(runtime / 'bin' / module_name), 'launcher':binding(launchers['pinyin']),
+                'launchers':{group:binding(path) for group,path in launchers.items()},
+                'log_file':binding(state / 'logs/rime.log')}
+    # Keep installation metadata with the extension, outside editable presets.
+    # Relative bindings follow Rime's actual user directory, including symlinks.
+    installed = rime_dir / 'wetype/installation.yaml'
+    installed.parent.mkdir(parents=True, exist_ok=True)
+    installed.write_text('# Generated installation metadata; personal settings belong in *.custom.yaml.\n'
+                         + json.dumps({'wetype': settings}, ensure_ascii=False, indent=2) + '\n')
+    legacy = rime_dir / 'wetype.runtime.yaml'
+    if legacy.is_file() and legacy.read_text().startswith('# Generated interface paths;'):
+        backups = ROOT / '.local/backups'
+        backups.mkdir(parents=True, exist_ok=True)
+        atomic_copy(legacy, backups / ('wetype.runtime-' + datetime.now().strftime('%Y%m%d-%H%M%S-%f') + '.yaml'))
+        legacy.unlink()
 
 
-def register_scheme(rime_dir: Path) -> Path | None:
+def register_scheme(rime_dir: Path, schemas: list[str] | None = None) -> Path | None:
     path = rime_dir / 'default.custom.yaml'
     original = path.read_text() if path.exists() else ''
     existing = set(re.findall(r'^\s*-\s*schema:\s*[\'\"]?([\w-]+)[\'\"]?\s*(?:#.*)?$', original, re.M))
-    missing = [schema for schema in SCHEMAS if schema not in existing]
+    requested = schemas if schemas is not None else ['wetype']
+    if not requested or any(schema not in [*SCHEMAS, *OPTIONAL_SCHEMAS] for schema in requested):
+        raise ValueError('unknown or empty scheme selection')
+    missing = [schema for schema in dict.fromkeys(requested) if schema not in existing]
     save_options = not re.search(r'^\s{2}[\'\"]?switcher/save_options/\+[\'\"]?:',original,re.M)
     if not missing and not save_options:
         return None
@@ -222,6 +262,9 @@ def deploy(rime_dir: Path, runtime: Path, default_only: bool = False) -> None:
             command.append('--default-only')
         else:
             command.extend(SCHEMAS)
+            menu = (rime_dir / 'default.custom.yaml').read_text()
+            active = set(re.findall(r'^\s*-\s*schema:\s*[\'\"]?([\w-]+)[\'\"]?\s*(?:#.*)?$', menu, re.M))
+            command.extend(schema for schema in OPTIONAL_SCHEMAS if schema in active)
         subprocess.run(command,
                        stdout=output, stderr=subprocess.STDOUT, timeout=60, check=True)
 
@@ -231,7 +274,7 @@ def disable(rime_dir: Path, runtime: Path) -> Path | None:
     rime_dir = rime_dir.resolve()
     path = rime_dir / 'default.custom.yaml'
     original = path.read_text()
-    item = r'^\s*-\s*schema:\s*[\'\"]?(?:' + '|'.join(map(re.escape,SCHEMAS)) + r')[\'\"]?\s*(?:#.*)?$'
+    item = r'^\s*-\s*schema:\s*[\'\"]?(?:' + '|'.join(map(re.escape,[*SCHEMAS, *OPTIONAL_SCHEMAS])) + r')[\'\"]?\s*(?:#.*)?$'
     lines = original.splitlines(keepends=True)
     changed = ''.join(line for line in lines if not re.fullmatch(item, line.rstrip('\r\n'))).replace(SAVE_OPTIONS_PATCH,'')
     if changed == original:

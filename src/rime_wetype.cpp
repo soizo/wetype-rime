@@ -26,6 +26,7 @@
 #include "cell_dicts.h"
 #include "session_options.h"
 #include "candidate_preferences.h"
+#include "rime_paths.h"
 namespace wetype {
 static const InputMode &selected_mode(rime::Engine *engine){
     string fixed;engine->schema()->config()->GetString("wetype/mode",&fixed);
@@ -183,6 +184,7 @@ class Translator:public rime::Translator {
         if(!config->GetString(string("wetype/launchers/")+mode.group,&path))
             config->GetString("wetype/launcher",&path);
         if(path.empty())throw std::runtime_error("wetype launcher not configured");
+        path=user_path(path);
         if(host&&session)host->command("CLOSE "+std::to_string(session));
         if(host)for(auto id:fuzzy_sessions)host->command("CLOSE "+std::to_string(id));
         fuzzy_sessions.clear();
@@ -239,7 +241,7 @@ class Translator:public rime::Translator {
     }
     void error(const std::exception &e){
         string path;if(engine_->schema()->config()->GetString("wetype/log_file",&path))
-            if(FILE *f=fopen(path.c_str(),"a")){fprintf(f,"[wetype] %s\n",e.what());fclose(f);}
+            if(FILE *f=fopen(user_path(path).c_str(),"a")){fprintf(f,"[wetype] %s\n",e.what());fclose(f);}
         engine_->context()->set_property("_wetype_error",e.what());
     }
     rime::an<rime::Translation> snapshot(const string &input,size_t start,size_t end){
@@ -266,7 +268,7 @@ class Translator:public rime::Translator {
                 if(source!=logged_context_source){
                     string path;
                     if(engine_->schema()->config()->GetString("wetype/log_file",&path))
-                        if(FILE *f=fopen(path.c_str(),"a")){fprintf(f,"[wetype] surrounding source=%s bytes=%zu\n",source.c_str(),text_context.before.size());fclose(f);}
+                        if(FILE *f=fopen(user_path(path).c_str(),"a")){fprintf(f,"[wetype] surrounding source=%s bytes=%zu\n",source.c_str(),text_context.before.size());fclose(f);}
                     logged_context_source=source;
                 }
                 context_sampled=true;
@@ -373,7 +375,7 @@ public:
             ctx->set_property("_wetype_adapter",image.dli_fname);
             string log;
             if(engine_->schema()->config()->GetString("wetype/log_file",&log))
-                if(FILE *f=fopen(log.c_str(),"a")){
+                if(FILE *f=fopen(user_path(log).c_str(),"a")){
                     fprintf(f,"[wetype] adapter ready: %s\n",image.dli_fname);
                     if(words_valid&&user_words.skipped_codes)fprintf(f,"[wetype] custom_phrase incompatible codes skipped=%zu\n",user_words.skipped_codes);
                     fclose(f);
