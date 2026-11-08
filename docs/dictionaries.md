@@ -8,15 +8,24 @@ there is no second Rime translator for these entries.
 
 ## Enable or disable
 
+Keep personal settings in `<schema_id>.custom.yaml`, dictionary organisation in
+`wetype.dict.yaml`, and personal entries in `custom.dict.yaml`. The `.custom.yaml`
+suffix identifies a Rime configuration patch. The word `custom` in a dictionary
+filename has no special loading behaviour: `custom.dict.yaml` is an ordinary
+table, explicitly referenced by `import_tables`.
+
 Installation supplies two empty starter files in the Rime user directory:
 
 - `wetype.dict.yaml`: the main dictionary and its `import_tables` list.
-- `wetype_extra.dict.yaml`: a personal vocabulary table with commented examples.
+- `custom.dict.yaml`: a personal vocabulary table with commented examples.
 
 Existing dictionary files are preserved during installation and `sync-config`.
 Once installed, edit them directly in the Rime user directory. The checked-in
 files are starter templates, not replacements for personal vocabulary.
 Add at least one entry before enabling; Rime cannot compile an empty dictionary.
+
+`custom_phrase.txt` remains a separate shortcut table. It is not this dictionary
+and does not need to be renamed or converted.
 
 To enable the dictionary for the unified scheme, merge this into
 `wetype.custom.yaml`:
@@ -69,7 +78,7 @@ version: "1.0"
 sort: by_weight
 use_preset_vocabulary: false
 import_tables:
-  - wetype_extra
+  - custom
   - medical
   # - games
 ...

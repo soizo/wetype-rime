@@ -42,7 +42,7 @@ The example excludes `user_table` through Rime's standard `excluded_types` setti
 
 Merge `dictionaries/wetype.custom.yaml` into the target scheme's normal patch to
 enable `wetype.dict.yaml`. Its `import_tables` list selects independent ordinary
-Rime dictionary files, including the empty `wetype_extra.dict.yaml` starter.
+Rime dictionary files, including the empty `custom.dict.yaml` starter.
 Set `translator/dictionary: null` and deploy to disable imports. This extension is
 disabled by default; [the dictionary guide](../../docs/dictionaries.md) explains
 entry formats, native weights and retained learning.

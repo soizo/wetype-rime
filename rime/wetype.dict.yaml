@@ -6,7 +6,7 @@ version: "1.0"
 sort: by_weight
 use_preset_vocabulary: false
 import_tables:
-  - wetype_extra
+  - custom
 ...
 # Add entries here, or maintain separate imported *.dict.yaml files.
 # Columns: text<TAB>full pinyin syllables<TAB>initial weight

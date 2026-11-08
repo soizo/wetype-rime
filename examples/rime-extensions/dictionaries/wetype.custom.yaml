@@ -1,4 +1,7 @@
 # Merge into the target scheme's <schema_id>.custom.yaml, then deploy.
+# Unified scheme: wetype.custom.yaml; Xiaohe: wetype_flypy.custom.yaml.
+# Mainland Xiaohe: wetype_flypy_gov.custom.yaml.
+# Add vocabulary to custom.dict.yaml before enabling this dictionary.
 patch:
   translator/dictionary: wetype
 # Disable again with: translator/dictionary: null

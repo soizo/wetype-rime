@@ -32,4 +32,4 @@ SKILL.md
 /rime/*.txt
 /rime/*.dict.yaml
 !/rime/wetype.dict.yaml
-!/rime/wetype_extra.dict.yaml
+!/rime/custom.dict.yaml

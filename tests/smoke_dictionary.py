@@ -66,8 +66,8 @@ print('PASS: native weight mapping, full/double pinyin, cold import, disable, in
 # Exercise the official dictionary reader and its import_tables through librime.
 user=base/'user'
 (user/'default.custom.yaml').write_text('patch:\n  schema_list:\n    - schema: wetype\n    - schema: wetype_flypy\n')
-(user/'wetype_extra.dict.yaml').write_text('---\nname: wetype_extra\nversion: "1"\nsort: by_weight\ncolumns: [code, text, weight]\n...\nji heng shang jing\t霁蘅觞璟\t1000\n')
-(user/'wetype.dict.yaml').write_text('---\nname: wetype\nversion: "1"\nsort: by_weight\nimport_tables: [wetype_extra]\n...\n姬\tji\t1\n蘅\theng\t1\n觞\tshang\t1\n璟\tjing\t1\n')
+(user/'custom.dict.yaml').write_text('---\nname: custom\nversion: "1"\nsort: by_weight\ncolumns: [code, text, weight]\n...\nji heng shang jing\t霁蘅觞璟\t1000\n')
+(user/'wetype.dict.yaml').write_text('---\nname: wetype\nversion: "1"\nsort: by_weight\nimport_tables: [custom]\n...\n姬\tji\t1\n蘅\theng\t1\n觞\tshang\t1\n璟\tjing\t1\n')
 # Assert deployment itself succeeds with a disabled main dictionary, rather
 # than only checking that input remains available after a deployment error.
 with (base/'logs/deploy-acceptance.log').open('w') as log:

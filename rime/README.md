@@ -57,7 +57,7 @@ WeType小鹤大陆默认开启，方案菜单可切换“精准音 / 模糊音�
 
 Ordinary `*.dict.yaml` vocabulary and `import_tables` are supported through
 `translator/dictionary`, which is null by default. The installed
-`wetype.dict.yaml` and `wetype_extra.dict.yaml` are empty starter files. Merge
+`wetype.dict.yaml` and `custom.dict.yaml` are empty starter files. Merge
 `translator/dictionary: wetype` into the target scheme's `.custom.yaml`, add
 full-pinyin entries, then deploy. Set the dictionary back to `null` to disable it.
 WeType handles matching, initial weight ranking and native learning. Existing

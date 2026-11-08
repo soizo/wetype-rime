@@ -1,6 +1,6 @@
 # Personal vocabulary starter. Existing files are preserved during upgrades.
 ---
-name: wetype_extra
+name: custom
 version: "1.0"
 sort: by_weight
 use_preset_vocabulary: false
