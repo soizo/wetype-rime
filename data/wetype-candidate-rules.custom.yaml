@@ -1,0 +1,5 @@
+# Candidate display rules for WeType. Rules apply to one layout and covered code.
+# - layout: flypy
+#   code: ni
+#   pin: [你, 尼]
+#   block: [拟]

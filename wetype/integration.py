@@ -87,7 +87,8 @@ def sync_configs(rime_dir: Path) -> Path | None:
     """Copy editable configuration verbatim, keeping runtime bindings separate."""
     source = ROOT / 'data'
     required = [source / (schema + '.schema.yaml') for schema in SCHEMAS]
-    required.extend([source / 'wetype_common.yaml', source / 'lua/wetype_bootstrap.lua'])
+    required.extend([source / 'wetype_common.yaml', source / 'lua/wetype_bootstrap.lua',
+                     source / 'lua/wetype_candidate_rules.lua'])
     for path in required:
         if not path.is_file():
             raise ValueError(f'missing scheme configuration: {path}')

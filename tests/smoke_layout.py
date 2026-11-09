@@ -22,9 +22,10 @@ assert (user/'wetype/bin/wetype-worker').is_file()
 register_scheme(alias)
 assert (user/'default.custom.yaml').read_text().count('    - schema:')==1
 register_scheme(alias,['wetype_flypy'])
-encode=lambda value:value.encode().hex()
-legacy='P '+encode('quanpin')+' '+encode('nihao')+' '+encode('拟好')+'\n'
+legacy = 'P 7175616e70696e 6e6968616f e6938ce5a5bd\n'
 (user/'wetype-candidates.state').write_text(legacy)
+(user/'wetype-candidate-rules.custom.yaml').write_text(
+    '- {layout: quanpin, code: nihao, pin: [拟好]}\n')
 logs=base/'logs';logs.mkdir()
 binary=ROOT/'build/rime-layout'
 subprocess.run(['/usr/bin/clang++','-std=c++17','-I'+str(DEFAULT_SOURCE/'src'),
@@ -33,5 +34,6 @@ subprocess.run(['/usr/bin/clang++','-std=c++17','-I'+str(DEFAULT_SOURCE/'src'),
 with (logs/'acceptance.log').open('w') as output:
     result=subprocess.run([str(binary),str(alias),str(logs)],stdout=output,stderr=subprocess.STDOUT,timeout=60)
 print((logs/'acceptance.log').read_text()[-2500:]);result.check_returncode()
-assert (user/'wetype/state/candidates').read_text()==legacy
+assert not (user/'wetype/state/candidates').exists()
+assert (user/'wetype-candidates.state').read_text() == legacy
 compact(base)

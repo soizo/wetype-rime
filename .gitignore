@@ -37,3 +37,4 @@ SKILL.md
 # Private installed resources must never become source files.
 /data/wetype/
 /data/*.custom.yaml
+!/data/wetype-candidate-rules.custom.yaml

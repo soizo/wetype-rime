@@ -33,8 +33,9 @@ To change a default for every supplied scheme, use `wetype_common.custom.yaml`:
 ```yaml
 patch:
   base/menu/page_size: 6
-  settings/candidate_keys/pin: Control+Shift+p
 ```
+
+Candidate display rules live in `wetype-candidate-rules.custom.yaml`. Optional shortcuts are described in the [candidate rules guide](../docs/user-words.md#candidate-pinning-and-blocking).
 
 A scheme's own patch takes precedence over shared defaults. The unified scheme's patch remains `wetype.custom.yaml`; it does not affect the standalone schemes. Do not edit the generated `build/` files or `wetype/installation.yaml` for personal settings.
 

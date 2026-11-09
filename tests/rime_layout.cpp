@@ -22,17 +22,17 @@ int main(int argc,char **argv){
             require(c.menu.num_candidates>0,"relative runtime paths did not load candidates");
             std::string first=c.menu.candidates[0].text;
             api->free_context(&c);
-            require(first==(pinyin?"拟好":"你好"),"legacy pin migration or native candidate failed");
+            require(first==(pinyin?"拟好":"你好"),"layout-scoped YAML pin or native candidate failed");
             char source[64]={};api->get_property(id,"_wetype_context_source",source,sizeof(source));
             require(std::string(source)==(pinyin?"disabled":"unavailable"),"shared or scheme-specific editor-context setting lost");
             require(api->select_candidate(id,0),"native selection rejected");
             RIME_STRUCT(RimeCommit,commit);require(api->get_commit(id,&commit),"missing commit");
             require(first==commit.text,"candidate feedback identity changed");api->free_commit(&commit);
             char error[4096]={};api->get_property(id,"_wetype_error",error,sizeof(error));require(!*error,error);
-            api->get_property(id,"_wetype_candidate_error",error,sizeof(error));require(!*error,error);
+            api->get_property(id,"_wetype_rules_error",error,sizeof(error));require(!*error,error);
             api->destroy_session(id);
         }
         api->finalize();
-        puts("PASS: relative installation paths, shared and scheme patches, legacy pin migration and native commit");
+        puts("PASS: relative installation paths, shared and scheme patches, layout-scoped YAML rules and native commit");
     }catch(const std::exception &error){fprintf(stderr,"FAIL: %s\n",error.what());return 1;}
 }

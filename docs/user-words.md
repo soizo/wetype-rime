@@ -74,32 +74,37 @@ All pinyin layouts share native learning and hot-word storage; each Wubi variant
 
 ## Candidate pinning and blocking
 
-Highlight a WeType candidate and use these default shortcuts:
+Edit `wetype-candidate-rules.custom.yaml` in your Rime user directory. A new installation starts with an empty rules list. Rime loads changes on the next candidate query. If the file contains invalid YAML or an invalid rule, the running input method keeps the last valid rules and reports the error in `_wetype_rules_error`.
 
-| Shortcut | Action |
-| --- | --- |
-| Control + Shift + P | Pin the highlighted candidate first; repeat on the pinned candidate to unpin |
-| Control + Shift + B | Hide the highlighted candidate for its covered input code |
-| Control + Shift + R | Remove the pin for the current complete input code |
-| Control + Shift + U | Restore all hidden candidates for the current complete input code |
+```yaml
+- layout: flypy
+  code: ni
+  pin: [你, 尼]
+  block: [拟]
+```
 
-Pins and blocks are scoped to the input layout and literal covered code. Each code has at most one pin. Pinning a blocked word restores it; blocking a pinned word removes its pin. Other candidates retain their relative order and continue normal native learning. Pinned candidates display `置顶` in their comments. Selection continues to use the original native candidate identifier, including partial selection and converted display text. Custom-phrase priorities apply after the pin.
+- `layout` is the WeType mode ID, such as `quanpin`, `flypy` or `wubi86`. Unified and standalone schemes share rules for the same layout.
+- `code` is the literal input covered by the candidate. For partial candidates it is only the covered part of the input. Match the original candidate text before any OpenCC conversion.
+- `pin` lists existing candidates in the order they should appear. `block` hides matches. If a word is in both lists, it stays hidden until the block is removed.
+- Rules apply only to candidates returned by WeType. They preserve the original selection, partial selection and native learning. Rime table-translator candidates retain their own ordering and behaviour.
 
-These controls are independent of native learning deletion. Use the standard Control + Delete action described above to remove an accidentally learned entry. Blocking hides a candidate locally without deleting its underlying dictionary entry or learning record; restoring a block therefore does not undo a native deletion. Imported custom phrases must also be removed from their source table if they should not return after deployment.
+Multiple entries for the same layout and code are applied in file order. Later entries can remove particular pins with `unpin: [word]` or clear blocks for that code with `restore: true`. You can also remove rules directly from the file. A rule can only reorder or hide candidates that the engine returns.
 
-Preferences are saved in `wetype/state/candidates` below the Rime user directory, with a separate `.lock` file. An older `wetype-candidates.state` snapshot is imported once under its original lock; the old source is retained for compatibility. Include this file in personal backups. Updates use a process lock and atomic replacement; they are shared across unified and standalone schemes using the same layout and survive session recreation and deployment. They are local adaptation rules, not native hard-fixed-position records. A pin promotes its word only when the engine returns it in the existing bounded candidate snapshot; it does not synthesise missing candidates or expand the 64-candidate limit. Blocks also apply to fuzzy candidates using their displayed input code. Ordinary official table-translator candidates are managed by that translator and are not changed by these shortcuts.
+### Optional shortcuts
 
-Override shortcuts in a scheme patch, for example:
+All four shortcuts default to disabled. For an individual scheme, add these opt-in bindings to its `.custom.yaml` and deploy.
 
 ```yaml
 patch:
-  wetype/candidate_keys/pin: Control+Shift+p
-  wetype/candidate_keys/block: Control+Shift+b
-  wetype/candidate_keys/unpin: Control+Shift+r
-  wetype/candidate_keys/restore: Control+Shift+u
+  wetype/candidate_keys/pin: Control+p
+  wetype/candidate_keys/block: Control+x
 ```
 
-Use an empty string to disable a shortcut. Finish the composition and deploy after editing key bindings. Preference read/write failures set `_wetype_candidate_error`; ordinary candidates remain available when preferences cannot be read.
+The same keys can be set for all supplied WeType schemes under `settings/candidate_keys/` in `wetype_common.custom.yaml`. The available actions are `pin` and `block` for the highlighted candidate, `unpin` for the highlighted candidate, and `restore` for all blocked candidates under the full current code. Use an empty string to disable a binding.
+
+Shortcuts append entries to the same YAML file without reformatting its comments or existing rules. A new pin goes after the existing pins for that code. Use a single block-style list without YAML document markers to permit writes. The installed comment-only template is ready to use. Stop editing the file before invoking a shortcut, then reload it in your editor before editing again. The file limit is 256 KiB.
+
+Candidate display rules do not change native learning. `Control + Delete` remains the native learned-entry removal action. The old native preference files are no longer read or migrated.
 
 ## Limits and diagnostics
 

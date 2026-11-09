@@ -15,7 +15,7 @@
 - Relocate the legacy default runtime without copying live learning files, preserving old paths through a compatibility symlink. Support relative in-profile bindings, symlinked profiles and explicit external runtime directories.
 - Preserve existing personal patches and text tables during preset synchronisation. Register only the unified scheme on new profiles; retain existing standalone choices and support explicit `--schema` selection.
 
-- Add persistent candidate pinning, blocking and separate restoration shortcuts, scoped to input layout and code, whilst preserving native selection identities and learning for other candidates. Keep native learned-entry deletion separate from reversible display blocking.
+- Move candidate pinning and blocking to the WeType schemes’ Rime filters. Store ordered rules in a personal YAML file with live reload and leave candidate-management shortcuts disabled by default.
 
 - Enable native Wubi pinyin assistance, remaining-code comments and wildcard code hints by default across all three variants and the unified scheme, with independent live switches and selection feedback. Allow longer pinyin composition while assistance is enabled.
 
