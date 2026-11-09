@@ -19,7 +19,7 @@ base:
     segmentors:
       - ascii_segmentor
       - matcher
-      - abc_segmentor
+      - wetype_segmentor
       - punct_segmentor
       - fallback_segmentor
     translators:

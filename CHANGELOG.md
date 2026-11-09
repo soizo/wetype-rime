@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Send semicolons that cannot act as a spelling key to Rime’s punctuation handler. Keep engine errors in diagnostics and allow Return to commit the original input.
+
 - Hide infrequent fuzzy-spelling, expression and Wubi assistance preferences from the menu whilst retaining Rime configuration defaults and option compatibility.
 
 - Delegate mainland Xiaohe generation and distribution to OpenCCGovForRime; retain compatibility with externally installed variants.

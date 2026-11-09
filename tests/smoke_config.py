@@ -121,10 +121,10 @@ def main():
         session = create()
         assert session and select(session, schema.encode()), 'cannot select configured scheme'
         option(session, b'ascii_mode', 0)
-        def expect(code, expected):
+        def expect(code, expected, final_key=' '):
             for letter in code:
                 assert key(session, ord(letter), 0), f'key rejected: {letter}'
-            assert key(session, ord(' '), 0), 'space rejected'
+            assert key(session, ord(final_key), 0), f'commit key rejected: {final_key}'
             value = Commit(); value.data_size = C.sizeof(value) - C.sizeof(C.c_int)
             assert commit(session, C.byref(value)), f'no commit for {code}'
             try:
@@ -140,6 +140,8 @@ def main():
         code = 'vsgo' if schema.startswith('wetype_flypy') else 'zhongguo'
         expect(code, '中國' if args.feature == 'mainland' else '中国')
         if args.feature == 'mainland':
+            expect('go', '過；', final_key=';')
+            assert not property_value(session, b'_wetype_error'), 'semicolon was sent to the engine as spelling'
             expect('nihc', '你好')
             # Generated variants default to mainland traditional output.
             assert key(session, 65505, 0), 'left Shift toggle rejected'

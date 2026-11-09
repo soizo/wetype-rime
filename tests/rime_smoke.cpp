@@ -1,6 +1,8 @@
 #include "../src/rime_text_context.h"
 // Exercise the installed librime and its actual native component path.
 #include <rime_api.h>
+#include <rime/context.h>
+#include <rime/key_event.h>
 #include <dlfcn.h>
 #include <cstdio>
 #include <cstdlib>
@@ -18,15 +20,16 @@
 #include "imk_fixture.h"
 static RimeApi *api;
 static void require(bool value,const char *message){if(!value)throw std::runtime_error(message);}
+static std::string property(RimeSessionId id,const char *name){
+    char value[512]={};api->get_property(id,name,value,sizeof(value));return value;
+}
 static void type(RimeSessionId id,const std::string &s){for(unsigned char c:s){
     auto started=std::chrono::steady_clock::now();
     require(api->process_key(id,c,(c>='A'&&c<='Z')?1:0),"input not handled");
     // IMK asks for the menu after every key, including incomplete prefixes.
     RIME_STRUCT(RimeContext,ctx);require(api->get_context(id,&ctx),"no per-key context");
-    for(int i=0;i<ctx.menu.num_candidates;++i)
-        require(!ctx.menu.candidates[i].comment||
-                std::string(ctx.menu.candidates[i].comment).find("引擎暂不可用")==std::string::npos,"engine failed during per-key rendering");
     api->free_context(&ctx);
+    require(property(id,"_wetype_error").empty(),"engine failed during per-key rendering");
     auto ms=std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now()-started).count();
     printf("key-render-ms=%lld\n",static_cast<long long>(ms));
 }}
@@ -55,9 +58,6 @@ static void expect_spelling(RimeSessionId id,const std::string &expected){
     raw.erase(std::remove(raw.begin(),raw.end(),'\''),raw.end());
     require(actual==raw,"preedit capitalization changed");
 }
-static std::string property(RimeSessionId id,const char *name){
-    char value[512]={};api->get_property(id,name,value,sizeof(value));return value;
-}
 static std::string mode_sample(const std::string &mode){
     if(mode=="quanpin")return "nihao";
     if(mode=="flypy")return "nihc";
@@ -69,6 +69,22 @@ static std::string mode_sample(const std::string &mode){
 static void select_mode(RimeSessionId id,const std::string &mode){
     for(const auto &option:wetype::input_modes)api->set_option(id,(std::string("wetype_mode_")+option.id).c_str(),false);
     api->set_option(id,("wetype_mode_"+mode).c_str(),true);
+}
+static void semicolon_punctuation(RimeSessionId id, const char *code) {
+    auto with_punctuation = [&](char key) {
+        type(id, code);
+        require(api->process_key(id, key, 0), "punctuation key not handled");
+        require(std::string(api->get_input(id)).empty(), "punctuation left a composition open");
+        return commit(id);
+    };
+    auto baseline = with_punctuation(',');
+    const std::string comma = "，";
+    require(baseline.size() >= comma.size() && baseline.substr(baseline.size() - comma.size()) == comma,
+            "comma did not commit with the preceding input");
+    auto actual = with_punctuation(';');
+    require(actual == baseline.substr(0, baseline.size() - comma.size()) + "；",
+            "semicolon did not commit like ordinary punctuation");
+    require(property(id, "_wetype_error").empty(), "punctuation was sent to the native engine as spelling");
 }
 static std::vector<std::string> all_menu(RimeSessionId id){
     std::vector<std::string> rows;RimeCandidateListIterator it{};
@@ -128,6 +144,9 @@ static void input_modes(RimeSessionId id){
             type(id,"j;");expect_spelling(id,"j;");
             require(!menu(id).empty()&&property(id,"_wetype_error").empty(),"double pinyin semicolon failed");
             api->clear_composition(id);
+            semicolon_punctuation(id, "ni");
+        } else if (std::string(mode.id) == "flypy") {
+            semicolon_punctuation(id, "go");
         }
     }
     require(api->select_schema(id,"wetype"),"cannot restore unified wetype");
@@ -220,8 +239,7 @@ static void timing(RimeSessionId id){
                 if(deleting)expected.pop_back();else expected+=sample[index];
                 if((index+1)%batch==0||index+1==sample.size()){
                     RIME_STRUCT(RimeContext,ctx);require(api->get_context(id,&ctx),"timed context unavailable");
-                    for(int i=0;i<ctx.menu.num_candidates;++i)
-                        require(!ctx.menu.candidates[i].comment||std::string(ctx.menu.candidates[i].comment).find("引擎暂不可用")==std::string::npos,"engine failed in timed burst");
+                    require(property(id,"_wetype_error").empty(),"engine failed in timed burst");
                     require(expected==api->get_input(id),"timed burst lost or reordered input");
                     std::string displayed=ctx.composition.preedit?ctx.composition.preedit:"";
                     displayed.erase(std::remove(displayed.begin(),displayed.end(),'\''),displayed.end());
@@ -280,6 +298,25 @@ int main(int argc,char **argv){
         auto id=api->create_session();require(id,"cannot create Rime session");
         require(api->select_schema(id,"wetype"),"cannot select wetype schema");
         api->set_option(id,"ascii_mode",false);
+        require(api->select_schema(id, "luna_pinyin"), "reference Rime schema unavailable");
+        semicolon_punctuation(id, "go");
+        require(api->select_schema(id, "wetype_flypy"), "Xiaohe schema unavailable");
+        semicolon_punctuation(id, "go");
+        {
+            std::unique_ptr<rime::Engine> engine(rime::Engine::Create());
+            engine->ApplySchema(new rime::Schema("wetype_flypy"));
+            auto ctx = engine->context();
+            std::string raw(129, 'a');
+            ctx->set_input(raw);
+            require(!ctx->GetSelectedCandidate(), "worker failure appeared in the candidate menu");
+            require(ctx->get_property("_wetype_error") == "invalid input", "worker failure lost its diagnostic");
+            std::string committed;
+            auto connection = engine->sink().connect([&](const std::string &value) { committed += value; });
+            require(engine->ProcessKey(rime::KeyEvent("Return")) && committed == raw,
+                    "worker failure prevented committing the raw input");
+        }
+        require(api->select_schema(id, "wetype"), "cannot restore unified wetype");
+        api->set_option(id, "ascii_mode", false);
         for(auto sample:{std::pair<const char *,const char *>{"nihao","ni'hao"},
                          {"nihaozhongguo","ni'hao'zhong'guo"},{"xian","xian"},
                          {"xi'an","xi'an"},{"beijin","bei'jin"},{"codex","codex"},{"nh","n'h"}}){

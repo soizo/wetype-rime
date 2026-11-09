@@ -10,6 +10,7 @@
 #include <rime/module.h>
 #include <rime/registry.h>
 #include <rime/processor.h>
+#include <rime/segmentor.h>
 #include <rime/key_event.h>
 #include <wetype_modes.h>
 #include <dlfcn.h>
@@ -34,8 +35,39 @@ static const InputMode &selected_mode(rime::Engine *engine){
         if(engine->context()->get_option(string("wetype_mode_")+mode.id))return mode;
     return input_mode("quanpin");
 }
-// Keep the official speller's editing/selection behavior. Only reserve the
-// semicolon for layouts that actually use it; otherwise the punctuator handles it.
+static bool semicolon_is_final(const string &input,size_t start,size_t position){
+    // In the layouts that use it, semicolon can only close a two-key syllable.
+    size_t delimiter=position?input.rfind('\'',position-1):string::npos;
+    if(delimiter!=string::npos&&delimiter>=start)start=delimiter+1;
+    return position>start&&(position-start)%2==1&&input[position-1]!=';';
+}
+
+// The speller and segmentor must agree on where the alphabet ends, so the
+// standard punctuator can translate a semicolon immediately after a word.
+class ModeSegmentor:public rime::Segmentor {
+    std::unique_ptr<rime::Segmentor> abc;
+public:
+    explicit ModeSegmentor(const rime::Ticket &ticket):rime::Segmentor(ticket),
+        abc(rime::Segmentor::Require("abc_segmentor")->Create(ticket)){}
+    bool Proceed(rime::Segmentation *segmentation) override{
+        const auto &input=segmentation->input();
+        size_t start=segmentation->GetCurrentStartPosition();
+        const bool spells_semicolon=selected_mode(engine_).semicolon;
+        for(size_t pos=input.find(';',start);pos!=string::npos;pos=input.find(';',pos+1)){
+            if(spells_semicolon&&semicolon_is_final(input,start,pos))continue;
+            if(pos==start)return true;
+            rime::Segmentation prefix;
+            prefix.Reset(input.substr(0,pos));
+            prefix.emplace_back(start,start);
+            abc->Proceed(&prefix);
+            if(prefix.back().end>start)segmentation->AddSegment(std::move(prefix.back()));
+            return true;
+        }
+        return abc->Proceed(segmentation);
+    }
+};
+
+// Keep the official speller's editing and selection behaviour.
 class ModeSpeller:public rime::Processor {
     std::unique_ptr<rime::Processor> speller;
 public:
@@ -43,8 +75,9 @@ public:
         speller(rime::Processor::Require("speller")->Create(ticket)){}
     rime::ProcessResult ProcessKeyEvent(const rime::KeyEvent &key) override{
         const auto &mode=selected_mode(engine_);
-        if(key.keycode()==';'&&!mode.semicolon)return rime::kNoop;
         auto ctx=engine_->context();
+        if(key.keycode()==';'&&(!mode.semicolon||!semicolon_is_final(ctx->input(),
+               ctx->composition().GetConfirmedPosition(),ctx->caret_pos())))return rime::kNoop;
         // Mixed pinyin can exceed four keys. Only force four-code selection
         // when pinyin assistance is disabled; otherwise keep the composition.
         string pinyin_option;
@@ -222,7 +255,7 @@ class Translator:public rime::Translator {
             if(FILE *f=fopen(user_path(path).c_str(),"a")){fprintf(f,"[wetype] %s\n",e.what());fclose(f);}
         engine_->context()->set_property("_wetype_error",e.what());
     }
-    rime::an<rime::Translation> snapshot(const string &input,size_t start,size_t end){
+    rime::an<rime::Translation> snapshot(const string &input,size_t start){
         auto out=std::make_shared<rime::FifoTranslation>();
         try{
             ensure();
@@ -305,7 +338,8 @@ class Translator:public rime::Translator {
             for(size_t i=head;i<result.rows.size();++i)append(result.rows[i],result.ticket,session,false,configured_phrase(result.rows[i],input));
             engine_->context()->set_property("_wetype_error","");
         }catch(const std::exception &e){
-            error(e);out->Append(std::make_shared<rime::SimpleCandidate>("wetype_error",start,end,input,"引擎暂不可用，回车保留原文"));
+            error(e);
+            return nullptr;
         }
         return out;
     }
@@ -405,9 +439,9 @@ public:
     rime::an<rime::Translation> Query(const string &input,const rime::Segment &segment) override {
         if(!segment.HasTag("abc")||input.empty())return nullptr;
         std::weak_ptr<int> alive=lifetime;
-        return std::make_shared<DeferredTranslation>([this,alive,input,start=segment.start,end=segment.end]()->rime::an<rime::Translation>{
+        return std::make_shared<DeferredTranslation>([this,alive,input,start=segment.start]()->rime::an<rime::Translation>{
             if(alive.expired())return nullptr;
-            return snapshot(input,start,end);
+            return snapshot(input,start);
         });
     }
 };
@@ -416,6 +450,7 @@ static void rime_wetype_initialize(){
     wetype::install_imk_context();
     rime::Registry::instance().Register("wetype_translator",new rime::Component<wetype::Translator>);
     rime::Registry::instance().Register("wetype_speller",new rime::Component<wetype::ModeSpeller>);
+    rime::Registry::instance().Register("wetype_segmentor",new rime::Component<wetype::ModeSegmentor>);
     rime::Registry::instance().Register("wetype_expression_translator",new rime::Component<wetype::ExpressionTableTranslator>);
 }
 static void rime_wetype_finalize(){std::lock_guard<std::mutex> lock(wetype::clients_mu);wetype::clients.clear();}
