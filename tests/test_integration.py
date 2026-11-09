@@ -27,6 +27,7 @@ class ConfigSyncTests(IsolatedBackups):
         (source / 'lua').mkdir()
         (source / 'wetype_common.yaml').write_text('base: {}\nsettings: {}\n')
         (source / 'lua/wetype_bootstrap.lua').write_text('return {}\n')
+        (source / 'lua/wetype_candidate_rules.lua').write_text('return {}\n')
         (source / 'lua/custom.lua').write_text('return {}\n')
         target = ROOT / 'installed'
         target.mkdir()
