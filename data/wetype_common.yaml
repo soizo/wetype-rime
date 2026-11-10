@@ -25,6 +25,7 @@ base:
     translators:
       - punct_translator
       - wetype_translator
+      - table_translator@custom_phrase
     filters:
       - lua_filter@*wetype_candidate_rules*filter
   menu:
@@ -53,6 +54,8 @@ base:
     dictionary: ""
     user_dict: custom_phrase
     db_class: stabledb
+    enable_completion: false
+    enable_sentence: false
     initial_quality: 99
 
   translator:

@@ -26,7 +26,7 @@ patch:
   custom_phrase/user_dict: custom_phrase
 ```
 
-Then deploy. Existing schema IDs, option names, custom patches, OpenCC resources and personal tables remain compatible. The supplied schemes inherit Rime's key-binding and punctuation presets, retain uppercase input for the native engine, and use `custom_phrase.txt` through the ordinary `custom_phrase` namespace. See [user words](../docs/user-words.md) for priorities, literal output, deletion and optional official phrase-translator ownership.
+Then deploy. The supplied schemes inherit Rime's key-binding and punctuation presets, retain uppercase input for the native engine, and use Rime's standard table translator for `custom_phrase.txt`. See [user words](../docs/user-words.md) for weights, literal output and migration from native phrase imports.
 
 To change a default for every supplied scheme, use `wetype_common.custom.yaml`:
 

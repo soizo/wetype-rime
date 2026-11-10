@@ -36,8 +36,33 @@ int main(int argc,char **argv){
         RIME_STRUCT(RimeTraits,traits);traits.shared_data_dir="/Library/Input Methods/Squirrel.app/Contents/SharedSupport";
         traits.user_data_dir=argv[1];traits.log_dir=argv[2];traits.modules=modules;traits.app_name="rime.wetype-words-test";traits.min_log_level=2;
         api->setup(&traits);api->initialize(&traits);api->start_maintenance(true);api->join_maintenance_thread();
+        const char *schemas[]={"wetype","wetype_quanpin","wetype_flypy","wetype_natural","wetype_microsoft","wetype_sogou","wetype_ziguang","wetype_abc","wetype_jiajia","wetype_wubi86","wetype_wubi98","wetype_wubi_new"};
         auto id=api->create_session();require(id,"cannot create Rime session");
-        for(const char *schema:{"wetype","wetype_quanpin","wetype_flypy","wetype_natural","wetype_microsoft","wetype_sogou","wetype_ziguang","wetype_abc","wetype_jiajia","wetype_wubi86","wetype_wubi98","wetype_wubi_new"}){
+        for(const char *schema:schemas){
+            require(api->select_schema(id,schema),"scheme unavailable");api->set_option(id,"ascii_mode",false);
+            const bool wubi=std::string(schema).find("wubi")!=std::string::npos;
+            for(const char *code:{wubi?"nc":"niconico",wubi?"nk":"nikoniko"}){
+                auto menu=rows(id,code);
+                require(menu.size()>=2&&menu[0]=="ニコニコ"&&menu[1]=="ﾆｺﾆｺ",
+                        "default table lost a custom-phrase alias or its weight order");
+                require(api->select_candidate_on_current_page(id,0)&&committed(id)=="ニコニコ",
+                        "standard Rime phrase did not commit");
+            }
+        }
+        auto prefix=rows(id,"n");
+        require(std::find(prefix.begin(),prefix.end(),"ニコニコ")==prefix.end(),"default table completed a prefix");
+        puts("PASS: Rime table aliases, weights and commits in all 12 schemes");
+
+        // Keep testing the native path as an explicit opt-in.
+        const std::string shared_patch=std::string(argv[1])+"/wetype_common.custom.yaml";
+        {
+            std::ofstream legacy(shared_patch);
+            legacy<<"patch:\n  base/engine/translators: [punct_translator, wetype_translator]\n";
+        }
+        api->destroy_session(id);api->cleanup_all_sessions();
+        api->start_maintenance(true);api->join_maintenance_thread();
+        id=api->create_session();require(id,"cannot recreate Rime session");
+        for(const char *schema:schemas){
             require(api->select_schema(id,schema),"scheme unavailable");api->set_option(id,"ascii_mode",false);
             std::string code=std::string(schema).find("wubi")!=std::string::npos?"wu":"wtrime";
             std::string word=code=="wu"?"五笔用户词":"引擎用户词";
@@ -115,12 +140,12 @@ int main(int argc,char **argv){
         require(property(id,"_wetype_error").empty(),"configuration error broke native input");
         require(api->process_key(id,' ',0),"ordinary selection failed");require(committed(id)=="你好","ordinary native candidates lost");
         api->destroy_session(id);api->finalize();
-        // A normal Rime component declaration takes ownership of custom_phrase.
-        // Non-native codes/weights then belong entirely to table_translator.
+        // Restoring the shared defaults delegates custom_phrase to Rime again.
+        require(std::remove(shared_patch.c_str())==0,"cannot restore the standard phrase translator");
         table.open(std::string(argv[1])+"/custom_phrase.txt");
         table<<"原生配置词\twtrime\t10\nRime短语\trr\t999\n";table.close();
         settings.open(std::string(argv[1])+"/wetype.custom.yaml");
-        settings<<"patch:\n  \"engine/translators/@before 0\": table_translator@custom_phrase\n  engine/filters: [simplifier@traditional, uniquifier]\n  traditional:\n    option_name: wetype_traditional\n    opencc_config: s2t.json\n    excluded_types: [user_table]\n  custom_phrase/initial_quality: 1000\n  custom_phrase/enable_completion: false\n  custom_phrase/enable_sentence: false\n";settings.close();
+        settings<<"patch:\n  engine/filters: [simplifier@traditional, uniquifier]\n  traditional:\n    option_name: wetype_traditional\n    opencc_config: s2t.json\n    excluded_types: [user_table]\n  custom_phrase/initial_quality: 1000\n  custom_phrase/enable_completion: false\n  custom_phrase/enable_sentence: false\n";settings.close();
         api->initialize(&traits);api->start_maintenance(true);api->join_maintenance_thread();
         id=api->create_session();require(api->select_schema(id,"wetype"),"official table translator unavailable");api->set_option(id,"ascii_mode",false);
         api->set_option(id,"wetype_traditional",true);
@@ -131,9 +156,10 @@ int main(int argc,char **argv){
         rows(id,"nihao");api->set_option(id,"wetype_mode_quanpin",false);api->set_option(id,"wetype_mode_flypy",true);
         require(std::string(api->get_input(id)).empty(),"Rime filter retained composition during a mode change");
         api->destroy_session(id);api->finalize();
-        // Removing the optional table component restores native generation;
-        // the newly added Rime-only phrase must not have entered its store.
-        settings.open(std::string(argv[1])+"/wetype.custom.yaml");settings<<"patch:\n  custom_phrase/user_dict: \"\"\n";settings.close();
+        // Check the native store without a phrase table. The Rime-only phrase
+        // must never have been imported there.
+        settings.open(std::string(argv[1])+"/wetype.custom.yaml");
+        settings<<"patch:\n  engine/translators: [punct_translator, wetype_translator]\n  custom_phrase/user_dict: \"\"\n";settings.close();
         api->initialize(&traits);api->start_maintenance(true);api->join_maintenance_thread();
         id=api->create_session();require(api->select_schema(id,"wetype"),"native scheme reload failed");api->set_option(id,"ascii_mode",false);
         menu=rows(id,"rr");require(std::find(menu.begin(),menu.end(),"Rime短语")==menu.end(),"official table phrase leaked into native storage");

@@ -1,6 +1,5 @@
-# Optional: merge this patch into wetype.custom.yaml in the Rime user directory.
+# Optional: choose a different Rime phrase table in wetype.custom.yaml.
 patch:
-  "engine/translators/@before 0": table_translator@custom_phrase
   custom_phrase:
     dictionary: ""
     user_dict: wetype_phrases

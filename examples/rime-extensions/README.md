@@ -4,7 +4,7 @@ These examples are not enabled automatically. Install the native component first
 
 ## Custom phrases
 
-Merge `phrases/wetype.custom.yaml` into `wetype.custom.yaml` and copy `phrases/wetype_phrases.txt` to the user directory. The example uses Rime's official table translator: `myphrase` yields 我的自定义短语, whilst other input continues through WeType. This does not replace the native binary dictionaries or learning. For phrases managed through native WeType storage instead, use the ordinary `custom_phrase.txt` configuration described in [user words](../../docs/user-words.md).
+Rime reads `custom_phrase.txt` by default. To use the example table instead, merge `phrases/wetype.custom.yaml` into `wetype.custom.yaml` and copy `phrases/wetype_phrases.txt` to the user directory. See [user words](../../docs/user-words.md) for shared and per-scheme settings.
 
 ## Native Emoji
 
@@ -20,7 +20,7 @@ Merge `fuzzy/wetype.custom.yaml` into the target patch; for standalone Xiaohe, u
 
 ## Script conversion
 
-Merge `traditional/wetype.custom.yaml` into the scheme patch. The 简体 / 繁體 option defaults to simplified output and uses OpenCC `s2t.json` when enabled. Squirrel must provide its resources. Conversion changes displayed candidates whilst feedback retains the original native candidate identity. Rime's standard `excluded_types: [user_table]` preserves custom phrases literally for both native and official phrase translators.
+Merge `traditional/wetype.custom.yaml` into the scheme patch. The 简体 / 繁體 option defaults to simplified output and uses OpenCC `s2t.json` when enabled. Squirrel must provide its resources. Conversion changes displayed candidates whilst feedback retains the original native candidate identity. Rime's standard `excluded_types: [user_table]` preserves the exact text of custom phrase candidates.
 
 ## Combining examples
 

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Use Rime's standard table translator for custom phrases in every supplied scheme, allowing multiple exact codes for the same phrase.
+
 - Send semicolons that cannot act as a spelling key to Rime’s punctuation handler. Keep engine errors in diagnostics and allow Return to commit the original input.
 
 - Hide infrequent fuzzy-spelling, expression and Wubi assistance preferences from the menu whilst retaining Rime configuration defaults and option compatibility.
