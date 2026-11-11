@@ -84,8 +84,8 @@ To enable it across the supplied pinyin schemes, use `base/translator/dictionary
 专业术语	zhuan ye shu yu	100
 ```
 
-- **Default import weight is `0`.** Omit the third column or write `0` to let an unlearned word start as low-frequency vocabulary on the validated engine. WetypeRime seeds one use dated 30 days earlier. WeType calculates its rank from the input, context and learning.
-- **Positive weights express a preference among words with the same full pinyin.** On the validated engine, larger values receive a stronger initial preference within that group. For example, `200`, `199` and `198` form three levels, with the same effect as `3`, `2` and `1`. WeType ranks the words alongside built-in candidates and adjusts their order through learning. The built-in scores use WeType's own scale.
+- **The supplied tables default to weight `0`.** Omit the third column to use the dictionary default. WeType calculates its rank from the input, context and learning.
+- **Homophone preferences follow the main dictionary's `sort` setting.** With `by_weight` or no setting, higher effective weights come first and ties keep the dictionary collection order. With `original`, the collection order applies throughout. WeType uses this order to seed up to three low-frequency levels. Context and learning still determine the candidate positions.
 
 Use `custom_phrase.txt` for exact-code shortcuts. Its weights apply to the shortcut table and use a separate scale. See [dictionary configuration](docs/dictionaries.md#weights-and-learning) and [custom phrases](docs/user-words.md).
 

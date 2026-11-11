@@ -1,6 +1,8 @@
 #include <rime_api.h>
 #include <dlfcn.h>
 #include <fstream>
+#include <filesystem>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -28,6 +30,31 @@ static std::vector<std::string> query(RimeSessionId id,const char *code,bool all
     auto error=property(id,"_wetype_dictionary_error");if(!allow_dictionary_error&&!error.empty())throw std::runtime_error(error);
     require(property(id,"_wetype_error").empty(),"native input failed");return rows;
 }
+static unsigned initial_count(const std::filesystem::path &ledger,const std::string &word){
+    auto hex=[](const std::string &value){
+        std::string result;
+        for(unsigned char byte:value){
+            result+="0123456789abcdef"[byte>>4];
+            result+="0123456789abcdef"[byte&15];
+        }
+        return result;
+    };
+    const auto expected_code=hex("lan,qing,luo,yu"),expected_text=hex(word);
+    std::ifstream file(ledger);
+    std::string line;
+    unsigned count=0;
+    while(std::getline(file,line)){
+        std::istringstream row(line);
+        std::string tag,code,text;
+        if(row>>tag>>code>>text&&code==expected_code&&text==expected_text){
+            double weight;
+            bool owned,learned,installed;
+            if(tag=="D")count=0;
+            else require(bool(row>>weight>>owned>>learned>>installed>>count),"invalid fixture ledger");
+        }
+    }
+    return count;
+}
 int main(int argc,char **argv){
     if(argc!=3)return 2;
     try{
@@ -48,7 +75,10 @@ int main(int argc,char **argv){
         modified(std::string(argv[1])+"/wetype.custom.yaml");
         deploy();id=session("wetype");rows=query(id,"jihengshangjing");
         require(std::find(rows.begin(),rows.end(),"霁蘅觞璟")!=rows.end(),"imported dictionary missing");
-        require(property(id,"_wetype_dictionary_entries")=="6","official columns/import_tables not read");
+        require(property(id,"_wetype_dictionary_entries")=="9","official columns/import_tables not read");
+        auto ledger=std::filesystem::path(argv[2]).parent_path()/"runtime/state/learning/rime-lexicon.state";
+        require(initial_count(ledger,"兰青洛雨")==3&&initial_count(ledger,"岚青洛雨")==2&&initial_count(ledger,"兰清洛羽")==1,
+                "by_weight did not sort by weight and keep source order for ties");
         rows=query(id,"nihao");
         require(!rows.empty()&&rows[0]=="你好","unweighted vocabulary displaced the common candidate");
         require(std::find(rows.begin(),rows.end(),"拟郝")!=rows.end(),"unweighted vocabulary missing from first page");
@@ -65,6 +95,19 @@ int main(int argc,char **argv){
         rows=query(id,"jihguhjk");
         require(std::find(rows.begin(),rows.end(),"霁蘅觞璟")==rows.end(),"disabled context reused another dictionary");
         api->destroy_session(enabled);
+        api->destroy_session(id);api->cleanup_all_sessions();
+        auto root_dictionary=std::string(argv[1])+"/wetype.dict.yaml";
+        std::ifstream root_input(root_dictionary);
+        std::string source((std::istreambuf_iterator<char>(root_input)),std::istreambuf_iterator<char>());
+        root_input.close();
+        auto sort=source.find("sort: by_weight");
+        require(sort!=std::string::npos,"missing fixture sort setting");
+        source.replace(sort,sizeof("sort: by_weight")-1,"sort: original");
+        std::ofstream(root_dictionary)<<source;
+        modified(root_dictionary);
+        deploy();id=session("wetype");query(id,"lanqingluoyu");
+        require(initial_count(ledger,"岚青洛雨")==3&&initial_count(ledger,"兰清洛羽")==2&&initial_count(ledger,"兰青洛雨")==1,
+                "original did not keep source order across imported tables");
         api->destroy_session(id);api->cleanup_all_sessions();
         settings.open(std::string(argv[1])+"/wetype.custom.yaml");settings<<"patch:\n  translator/dictionary: null\n";settings.close();
         modified(std::string(argv[1])+"/wetype.custom.yaml");

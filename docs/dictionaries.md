@@ -94,14 +94,18 @@ small personal lists.
 
 ## Weights and learning
 
-On the verified macOS 3.0.1 (680) engine build, the weight expresses an initial
-preference among entries with the same full pinyin. Omitted weights count as
-zero. The engine receives up to three low-frequency levels for each code,
-seeded with a 30-day-old initial history entry. Equal weights share a level.
-When there are more than three distinct weights, the two highest receive
-separate levels and the remaining weights share the lowest level. WeType
-ranks the entries alongside built-in candidates using input, context and
-learning.
+For each full-pinyin code, WetypeRime follows the main dictionary's Rime
+`sort` setting for its initial preferences, including rows from
+`import_tables`. `by_weight` and an omitted setting sort by descending
+effective weight, preserving collection order for equal weights.
+`sort: original` keeps collection order throughout. With the supplied
+`use_preset_vocabulary: false`, omitted weights are zero. If preset
+vocabulary is enabled, librime can supply a weight for a row without one.
+
+On the verified macOS 3.0.1 (680) engine build, the first two entries in each
+group can receive separate low-frequency levels. The remaining entries share
+the lowest level. WeType ranks the entries alongside built-in candidates
+using input, context and learning.
 
 Other engine builds use the standard native insertion method, with a
 logarithmic recency bias for positive weights. Weights from 0 through

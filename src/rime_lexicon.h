@@ -7,6 +7,8 @@
 #include <filesystem>
 #include <fstream>
 #include <cmath>
+#include <algorithm>
+#include <map>
 #include "lexicon_entry.h"
 
 namespace wetype {
@@ -56,6 +58,22 @@ struct RimeLexicon {
             if(code.empty()||code.size()>128||entry->text.empty()||entry->text.size()>4096)
                 throw std::runtime_error("invalid Rime dictionary entry");
             entries.push_back({std::move(code),entry->text,entry->weight});
+        }
+        std::map<std::string,std::vector<LexiconEntry *>> homophones;
+        for(auto &entry:entries)homophones[entry.code].push_back(&entry);
+        for(auto &group:homophones){
+            auto &rows=group.second;
+            // Match librime's stable homophone sort. The main table settings
+            // govern all rows collected through import_tables.
+            if(settings.sort_order()!="original")
+                std::stable_sort(rows.begin(),rows.end(),[](const auto *a,const auto *b){
+                    return a->weight>b->weight;
+                });
+            std::map<std::string,size_t> ranks;
+            for(const auto *entry:rows)ranks.try_emplace(entry->text,ranks.size());
+            const auto levels=std::min<size_t>(ranks.size(),3);
+            for(auto *entry:rows)
+                entry->initial_count=levels-std::min(ranks.at(entry->text),levels-1);
         }
     }
 };

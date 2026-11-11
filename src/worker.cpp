@@ -494,14 +494,19 @@ int main(int argc,char **argv) {
                 for(size_t i=0;i<count;++i){
                     if(getline(&line,&cap,stdin)<=0)throw std::runtime_error("incomplete dictionary batch");
                     string tag,key,value;double weight=0;std::istringstream row(line);
-                    if(strlen(line)>16384||!(row>>tag>>key>>value>>weight)||tag!="L"||row>>extra){valid=false;continue;}
+                    if(strlen(line)>16384||!(row>>tag>>key>>value>>weight)||tag!="L"){valid=false;continue;}
+                    uint32_t initial_count=0;
+                    row>>std::ws;
+                    if(!row.eof()&&(!(row>>initial_count)||initial_count<1||initial_count>3||row>>extra)){
+                        valid=false;continue;
+                    }
                     try{
                         auto code=unhex(key),text=unhex(value);total+=code.size()+text.size();
                         if(code.empty()||code.size()>128||code.front()==','||code.back()==','||code.find(",,")!=string::npos||
                            code.find_first_not_of("abcdefghijklmnopqrstuvwxyz,")!=string::npos||
                            text.empty()||text.size()>4096||text.find('\0')!=string::npos||!valid_utf8(text)||
                            !std::isfinite(weight)||weight<0||weight>1e12||total>2*1024*1024)valid=false;
-                        entries.push_back({std::move(code),std::move(text),weight});
+                        entries.push_back({std::move(code),std::move(text),weight,initial_count});
                     }catch(...){valid=false;}
                 }
                 if(getline(&line,&cap,stdin)<=0||string(line)!="END_LEXICON\n")throw std::runtime_error("incomplete dictionary batch");

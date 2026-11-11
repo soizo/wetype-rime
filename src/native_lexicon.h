@@ -194,15 +194,24 @@ public:
         else if(ledger_version==legacy_ledger_version)target_version=current_ledger_version;
         const bool refresh_scores=ledger_version!=target_version;
         std::map<Pair,double> desired;
-        for(const auto &entry:entries){auto key=Pair{entry.code,entry.text};
-            auto at=desired.find(key);if(at==desired.end()||at->second<entry.weight)desired[key]=entry.weight;}
+        std::map<Pair,uint32_t> resolved_counts;
+        for(const auto &entry:entries){
+            auto key=Pair{entry.code,entry.text};
+            auto at=desired.find(key);
+            if(at==desired.end()||at->second<entry.weight){
+                desired[key]=entry.weight;
+                resolved_counts[key]=entry.initial_count;
+            }
+        }
         // Keep at most three low-frequency levels per pinyin code. Equal
         // weights share a level and magnitudes do not imply recent selections.
         std::map<std::string,std::set<double>> desired_weights;
         if(add_with_history){
             for(const auto &item:desired)desired_weights[item.first.first].insert(item.second);
         }
-        auto initial_count=[](const std::set<double> &weights,double weight){
+        auto initial_count=[&](const Pair &key,double weight){
+            if(auto resolved=resolved_counts.at(key))return resolved;
+            const auto &weights=desired_weights.at(key.first);
             uint32_t count=1;
             // The largest weight gets the strongest of the available levels.
             for(auto it=weights.rbegin();it!=weights.rend()&&count<3;++it){
@@ -223,7 +232,7 @@ public:
             }else{
                 auto &record=it->second;
                 const bool score_changed=add_with_history
-                    ?record.initial_count!=initial_count(desired_weights.at(it->first.first),record.weight)
+                    ?record.initial_count!=initial_count(it->first,record.weight)
                     :refresh_scores&&record.weight==0;
                 if(score_changed&&record.owned&&!record.learned&&
                    lookup(dict.get(),it->first.first,it->first.second).present){
@@ -253,7 +262,7 @@ public:
                     if(!impl)throw std::runtime_error("native pinyin user dictionary implementation unavailable");
                     constexpr std::time_t history_age=30*24*60*60;
                     auto timestamp=static_cast<uint32_t>(std::time(nullptr)-history_age);
-                    auto count=initial_count(desired_weights.at(item.first.first),item.second);
+                    auto count=initial_count(item.first,item.second);
                     add_with_history(impl,item.first.first,item.first.second,option,count,timestamp,{}).wait();
                     records[item.first].initial_count=count;
                 }else{

@@ -151,7 +151,10 @@ public:
     static std::shared_ptr<const string> lexicon_message(const std::vector<LexiconEntry> &entries){
         if(entries.size()>10000)throw std::runtime_error("oversized dictionary configuration");
         std::ostringstream request;request<<std::setprecision(17)<<"LEXICON_SYNC "<<entries.size();
-        for(const auto &entry:entries)request<<"\nL "<<hex(entry.code)<<' '<<hex(entry.text)<<' '<<entry.weight;
+        for(const auto &entry:entries){
+            request<<"\nL "<<hex(entry.code)<<' '<<hex(entry.text)<<' '<<entry.weight;
+            if(entry.initial_count)request<<' '<<entry.initial_count;
+        }
         request<<"\nEND_LEXICON";auto message=request.str();
         if(message.size()>5*1024*1024)throw std::runtime_error("oversized dictionary configuration");
         return std::make_shared<const string>(std::move(message));
