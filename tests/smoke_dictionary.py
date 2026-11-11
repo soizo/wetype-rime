@@ -25,8 +25,8 @@ class Host:
         self.send('LEXICON_SYNC '+str(len(entries))+'\n'+''.join('L '+encode(code)+' '+encode(text)+' '+str(weight)+'\n' for code,text,weight in entries)+'END_LEXICON')
         assert self.read()=='OK'
     def open(self,mode):self.send('OPEN '+mode);tag,sid=self.read().split();assert tag=='OPENED';return sid
-    def query(self,sid,code):
-        self.send('QUERY '+sid+' '+encode(code));tag,ticket,count=self.read().split();assert tag=='RESULT';rows=[]
+    def query(self,sid,code,before=""):
+        self.send('QUERY '+sid+' '+encode(code)+' '+encode(before)+' - -');tag,ticket,count=self.read().split();assert tag=='RESULT';rows=[]
         for _ in range(int(count)):
             tag,index,cover,text,preedit=self.read().split();assert tag=='C';rows.append(bytes.fromhex(text).decode())
         assert self.read()=='END';return ticket,rows
@@ -39,9 +39,15 @@ try:
     host.sync(entries)
     _, baseline = host.query(host.open('quanpin'), 'nihao')
     unweighted = ('ni,hao', '拟郝', 0)
-    host.sync([*entries, unweighted])
+    host.sync([*entries, unweighted, ('qi,ji', '起乩', 0)])
     _, rows = host.query(host.open('quanpin'), 'nihao')
     assert rows[0] == baseline[0] and unweighted[1] in rows, rows
+    flypy = host.open('flypy')
+    _, rows = host.query(flypy, 'qiji')
+    first_page = rows[:8]
+    assert first_page.index('起乩') > max(first_page.index('奇迹'), first_page.index('契机')), rows
+    _, rows = host.query(flypy, 'qiji', '以此为')
+    assert rows[0] == '契机' and '起乩' in rows[:8], rows
     host.sync(entries)
     for mode,code in [('quanpin','jihengshangjing'),('flypy','jihguhjk'),('natural','jihguhjy')]:
         sid=host.open(mode);_,rows=host.query(sid,code)

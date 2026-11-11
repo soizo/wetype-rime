@@ -94,9 +94,12 @@ small personal lists.
 
 ## Weights and learning
 
-Entries with an omitted or zero weight start with WeType's default score and
-compete with its other candidates. An explicit positive weight adds an initial
-native ranking bias of one hour per `log2(1 + weight)`, capped at fourteen
+On the verified macOS 3.0.1 (680) engine build, entries with an omitted or
+zero weight enter the native ranker as low-frequency vocabulary with a
+30-day-old initial history entry. WeType ranks them alongside other candidates
+using the input and available context. Other engine builds use the standard
+native insertion method with zero extra weight. An explicit positive weight
+adds an initial native ranking bias of one hour per `log2(1 + weight)`, capped at fourteen
 days. Weights from 0 through 1,000,000,000,000 are accepted. Native
 floating-point precision can merge small differences. If multiple tables
 contain the same text and code, the largest weight is used.

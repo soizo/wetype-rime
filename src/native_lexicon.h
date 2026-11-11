@@ -3,6 +3,7 @@
 #include <mach-o/nlist.h>
 #include <dlfcn.h>
 #include <fstream>
+#include <functional>
 #include <cmath>
 #include <ctime>
 #include <memory>
@@ -35,11 +36,16 @@ class NativeLexicon {
     void *(*unwrap)(void *)=nullptr;
     std::shared_ptr<void> (*get_dict)(void *,uint16_t)=nullptr;
     Completion (*add)(void *,std::string_view,std::string_view,const void *)=nullptr;
+    using AddCallback=std::function<void(std::string_view,std::string_view,void *)>;
+    Completion (*add_with_history)(void *,std::string_view,std::string_view,const void *,
+                                   uint32_t,uint32_t,AddCallback)=nullptr;
     Completion (*remove)(void *,std::string_view,std::string_view)=nullptr;
     Present (*lookup)(void *,std::string_view,std::string_view)=nullptr;
     static constexpr const char *current_ledger_version="WETYPE_LEXICON_3";
     static constexpr const char *legacy_ledger_version="WETYPE_LEXICON_2";
-    bool loaded=false,legacy_scores=false;
+    static constexpr const char *ranked_ledger_version="WETYPE_LEXICON_4";
+    const char *ledger_version=current_ledger_version;
+    bool loaded=false;
     template<class T> static void bind(T &fn,const std::map<std::string,uintptr_t> &symbols,const char *name){
         auto at=symbols.find(name);
         if(at==symbols.end())throw std::runtime_error("ordinary dictionary ABI unavailable in this engine");
@@ -67,7 +73,7 @@ class NativeLexicon {
     void persist(const Pair &key){
         struct stat status{};
         if(stat(ledger.c_str(),&status)!=0||status.st_size>8*1024*1024){
-            save(legacy_scores?legacy_ledger_version:current_ledger_version);return;
+            save(ledger_version);return;
         }
         std::ofstream out(ledger,std::ios::app);
         auto at=records.find(key);
@@ -92,11 +98,19 @@ public:
         auto disk=reinterpret_cast<const mach_header_64 *>(bytes.data());
         if(disk->magic!=MH_MAGIC_64||disk->sizeofcmds>bytes.size()-sizeof(*disk))throw std::runtime_error("invalid dictionary engine header");
         const symtab_command *symtab=nullptr;uint64_t text_vm=0;size_t offset=sizeof(*disk);
+        // The private Impl layout is verified for this macOS 3.0.1 (680) image.
+        constexpr unsigned char history_abi_uuid[]={0x0b,0xe2,0xfc,0x91,0x0d,0x44,0x3f,0x47,
+            0x85,0x29,0x85,0x6d,0xe9,0x1d,0x1c,0x59};
+        bool history_abi=false;
         for(uint32_t i=0;i<disk->ncmds;++i){
             if(offset+sizeof(load_command)>sizeof(*disk)+disk->sizeofcmds)throw std::runtime_error("invalid engine load commands");
             auto command=reinterpret_cast<const load_command *>(bytes.data()+offset);
             if(command->cmdsize<sizeof(*command)||command->cmdsize>sizeof(*disk)+disk->sizeofcmds-offset)throw std::runtime_error("invalid engine load command");
             if(command->cmd==LC_SYMTAB&&command->cmdsize>=sizeof(symtab_command))symtab=reinterpret_cast<const symtab_command *>(command);
+            if(command->cmd==LC_UUID&&command->cmdsize>=sizeof(uuid_command)){
+                auto uuid=reinterpret_cast<const uuid_command *>(command);
+                history_abi=memcmp(uuid->uuid,history_abi_uuid,sizeof(history_abi_uuid))==0;
+            }
             if(command->cmd==LC_SEGMENT_64&&command->cmdsize>=sizeof(segment_command_64)){
                 auto segment=reinterpret_cast<const segment_command_64 *>(command);
                 if(strncmp(segment->segname,"__TEXT",16)==0)text_vm=segment->vmaddr;
@@ -113,10 +127,10 @@ public:
             auto name=bytes.data()+symtab->stroff+symbol.n_un.n_strx;
             auto length=strnlen(name,symtab->strsize-symbol.n_un.n_strx);
             if(length==symtab->strsize-symbol.n_un.n_strx)continue;
-            // Only the six required symbols are retained from the local image.
+            // Retain only the ordinary dictionary symbols.
             if(strstr(name,"ResourceMgr8InstanceEv")||strstr(name,"ResourceMgrdeEv")||
                strstr(name,"DictManager19GetSharedDictByKindEt")||strstr(name,"10UserDictV23AddE")||
-               strstr(name,"10UserDictV26RemoveE")||strstr(name,"10UserDictV212LookUpByPairE"))
+               (history_abi&&strstr(name,"10UserDictV24Impl3AddE"))||strstr(name,"10UserDictV26RemoveE")||strstr(name,"10UserDictV212LookUpByPairE"))
                 symbols.emplace(std::string(name,length),reinterpret_cast<uintptr_t>(info.dli_fbase)+symbol.n_value-text_vm);
         }
         bind(instance,symbols,"__ZN5wxime6engine9resources11ResourceMgr8InstanceEv");
@@ -125,12 +139,16 @@ public:
         bind(add,symbols,"__ZN5wxime4data4dict10UserDictV23AddENSt3__117basic_string_viewIcNS3_11char_traitsIcEEEES7_RKNS1_17UserDictAddOptionE");
         bind(remove,symbols,"__ZN5wxime4data4dict10UserDictV26RemoveENSt3__117basic_string_viewIcNS3_11char_traitsIcEEEES7_");
         bind(lookup,symbols,"__ZNK5wxime4data4dict10UserDictV212LookUpByPairENSt3__117basic_string_viewIcNS3_11char_traitsIcEEEES7_");
+        if(history_abi)bind(add_with_history,symbols,
+            "__ZN5wxime4data4dict10UserDictV24Impl3AddENSt3__117basic_string_viewIcNS4_11char_traitsIcEEEES8_RKNS1_17UserDictAddOptionEjjNS4_8functionIFvS8_S8_PS2_EEE");
+        ledger_version=add_with_history?ranked_ledger_version:current_ledger_version;
         std::ifstream state(ledger);std::string version;
         if(state){
             std::getline(state,version);
-            legacy_scores=version==legacy_ledger_version;
-            if(!legacy_scores&&version!=current_ledger_version)
-                throw std::runtime_error("invalid dictionary import ledger");
+            if(version==legacy_ledger_version)ledger_version=legacy_ledger_version;
+            else if(version==current_ledger_version)ledger_version=current_ledger_version;
+            else if(version==ranked_ledger_version)ledger_version=ranked_ledger_version;
+            else throw std::runtime_error("invalid dictionary import ledger");
             std::string line;
             while(std::getline(state,line)){
                 std::istringstream in(line);std::string tag,code,text,extra;Record row;
@@ -154,7 +172,11 @@ public:
     }
     void sync(const std::vector<Entry> &entries){
         if(!loaded)throw std::runtime_error("ordinary dictionary API unavailable");
-        auto dict=dictionary();std::map<Pair,double> desired;
+        auto dict=dictionary();
+        const char *target_version=add_with_history||ledger_version==ranked_ledger_version
+            ?ranked_ledger_version:current_ledger_version;
+        const bool refresh_scores=ledger_version!=target_version;
+        std::map<Pair,double> desired;
         for(const auto &entry:entries){auto key=Pair{entry.code,entry.text};
             auto at=desired.find(key);if(at==desired.end()||at->second<entry.weight)desired[key]=entry.weight;}
         for(auto it=records.begin();it!=records.end();){
@@ -168,7 +190,7 @@ public:
                 }else{auto key=it->first;it=records.erase(it);persist(key);}
             }else{
                 auto &record=it->second;
-                if(legacy_scores&&record.owned&&!record.learned&&record.weight==0&&
+                if(refresh_scores&&record.owned&&!record.learned&&record.weight==0&&
                    lookup(dict.get(),it->first.first,it->first.second).present){
                     // Persist the pending install first so an interrupted
                     // migration can restore the word on the next sync.
@@ -188,13 +210,22 @@ public:
             }
             if(!existing){
                 alignas(8) unsigned char option[24]={};float score=initial_score(item.second);memcpy(option+4,&score,sizeof(score));
-                add(dict.get(),item.first.first,item.first.second,option).wait();
+                if(add_with_history&&item.second==0){
+                    // Public Add records a use at the current time. Seed a
+                    // low-frequency entry whose recency bonus has decayed.
+                    void *impl=nullptr;
+                    memcpy(&impl,static_cast<const char *>(dict.get())+0x28,sizeof(impl));
+                    if(!impl)throw std::runtime_error("native pinyin user dictionary implementation unavailable");
+                    constexpr std::time_t history_age=30*24*60*60;
+                    auto timestamp=static_cast<uint32_t>(std::time(nullptr)-history_age);
+                    add_with_history(impl,item.first.first,item.first.second,option,1,timestamp,{}).wait();
+                }else add(dict.get(),item.first.first,item.first.second,option).wait();
             }
             records[item.first].installed=true;persist(item.first);
         }
-        if(legacy_scores){
-            save(current_ledger_version);
-            legacy_scores=false;
+        if(refresh_scores){
+            save(target_version);
+            ledger_version=target_version;
         }
     }
     // The worker is the sole writer. Keep selected vocabulary as learned words
