@@ -94,18 +94,17 @@ small personal lists.
 
 ## Weights and learning
 
-`weight` supplies an initial native ranking bias, not a fixed candidate position.
-The two engines use different score scales. The adapter maps a non-negative Rime
-weight to a bounded logarithmic native bias: one hour per `log2(1 + weight)` in
-the engine's time-domain score, capped at fourteen days. This is an adapter
-mapping, not equivalence to Rime's ranking formula. Weights from 0 through
-1,000,000,000,000 are accepted; native floating-point precision can merge small
-differences. If multiple tables contain the same text and code, the largest
-weight is used.
+Entries with an omitted or zero weight start with WeType's default score and
+compete with its other candidates. An explicit positive weight adds an initial
+native ranking bias of one hour per `log2(1 + weight)`, capped at fourteen
+days. Weights from 0 through 1,000,000,000,000 are accepted. Native
+floating-point precision can merge small differences. If multiple tables
+contain the same text and code, the largest weight is used.
 
-Unchanged deployment does not reapply weights or inflate learning. Changing the
-weight of an unlearned import replaces its initial native record. Existing
-native learning is preserved and is not overwritten by a source weight.
+Unchanged deployment preserves existing scores. Changing the weight of an
+unlearned import replaces its initial native record. The first import after
+upgrading refreshes the initial scores of existing unlearned zero-weight
+entries. WeType keeps learned entries and their scores.
 
 Disabling a table removes its unlearned imported records. Selecting an imported
 word retains it as native learning, so it may remain available after disabling

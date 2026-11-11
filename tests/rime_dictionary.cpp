@@ -48,7 +48,10 @@ int main(int argc,char **argv){
         modified(std::string(argv[1])+"/wetype.custom.yaml");
         deploy();id=session("wetype");rows=query(id,"jihengshangjing");
         require(!rows.empty()&&rows[0]=="霁蘅觞璟","imported dictionary missing");
-        require(property(id,"_wetype_dictionary_entries")=="5","official columns/import_tables not read");
+        require(property(id,"_wetype_dictionary_entries")=="6","official columns/import_tables not read");
+        rows=query(id,"nihao");
+        require(!rows.empty()&&rows[0]=="你好","unweighted vocabulary displaced the common candidate");
+        require(std::find(rows.begin(),rows.end(),"拟郝")!=rows.end(),"unweighted vocabulary missing from first page");
         api->set_option(id,"traditionalization",true);rows=query(id,"jihengshangjing");
         require(!rows.empty()&&rows[0]=="霽蘅觴璟","ordinary dictionary bypassed OpenCC");
         api->set_option(id,"traditionalization",false);

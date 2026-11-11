@@ -37,7 +37,9 @@ class NativeLexicon {
     Completion (*add)(void *,std::string_view,std::string_view,const void *)=nullptr;
     Completion (*remove)(void *,std::string_view,std::string_view)=nullptr;
     Present (*lookup)(void *,std::string_view,std::string_view)=nullptr;
-    bool loaded=false;
+    static constexpr const char *current_ledger_version="WETYPE_LEXICON_3";
+    static constexpr const char *legacy_ledger_version="WETYPE_LEXICON_2";
+    bool loaded=false,legacy_scores=false;
     template<class T> static void bind(T &fn,const std::map<std::string,uintptr_t> &symbols,const char *name){
         auto at=symbols.find(name);
         if(at==symbols.end())throw std::runtime_error("ordinary dictionary ABI unavailable in this engine");
@@ -52,11 +54,11 @@ class NativeLexicon {
         if(!result)throw std::runtime_error("native pinyin user dictionary unavailable");
         return result;
     }
-    void save(){
+    void save(const char *version){
         auto temporary=ledger+".tmp";
         std::ofstream out(temporary,std::ios::trunc);
         if(!out)throw std::runtime_error("cannot save dictionary import ledger");
-        out<<"WETYPE_LEXICON_2\n"<<std::setprecision(17);
+        out<<version<<'\n'<<std::setprecision(17);
         for(const auto &item:records)out<<"U "<<hex(item.first.first)<<' '<<hex(item.first.second)<<' '
             <<item.second.weight<<' '<<item.second.owned<<' '<<item.second.learned<<' '<<item.second.installed<<'\n';
         out.close();
@@ -64,7 +66,9 @@ class NativeLexicon {
     }
     void persist(const Pair &key){
         struct stat status{};
-        if(stat(ledger.c_str(),&status)!=0||status.st_size>8*1024*1024){save();return;}
+        if(stat(ledger.c_str(),&status)!=0||status.st_size>8*1024*1024){
+            save(legacy_scores?legacy_ledger_version:current_ledger_version);return;
+        }
         std::ofstream out(ledger,std::ios::app);
         auto at=records.find(key);
         out<<std::setprecision(17)<<(at==records.end()?"D ":"U ")<<hex(key.first)<<' '<<hex(key.second);
@@ -124,7 +128,9 @@ public:
         std::ifstream state(ledger);std::string version;
         if(state){
             std::getline(state,version);
-            if(version!="WETYPE_LEXICON_2")throw std::runtime_error("invalid dictionary import ledger");
+            legacy_scores=version==legacy_ledger_version;
+            if(!legacy_scores&&version!=current_ledger_version)
+                throw std::runtime_error("invalid dictionary import ledger");
             std::string line;
             while(std::getline(state,line)){
                 std::istringstream in(line);std::string tag,code,text,extra;Record row;
@@ -140,9 +146,10 @@ public:
         loaded=true;
     }
     bool ready() const {return loaded;}
-    // Scores are time-domain values in this ABI. Use a bounded logarithmic
-    // initial bias, rather than treating a Rime frequency as a native timestamp.
+    // Zero leaves the initial score to the engine. Only explicit positive
+    // weights request a time-domain bias.
     static float initial_score(double weight){
+        if(weight==0)return 0;
         return static_cast<float>(std::time(nullptr)+3600*std::min(336.0,std::log2(1+weight)));
     }
     void sync(const std::vector<Entry> &entries){
@@ -159,7 +166,17 @@ public:
                 if(changed&&(!it->second.owned||it->second.learned)){
                     it->second.weight=wanted->second;persist(it->first);++it;
                 }else{auto key=it->first;it=records.erase(it);persist(key);}
-            }else ++it;
+            }else{
+                auto &record=it->second;
+                if(legacy_scores&&record.owned&&!record.learned&&record.weight==0&&
+                   lookup(dict.get(),it->first.first,it->first.second).present){
+                    // Persist the pending install first so an interrupted
+                    // migration can restore the word on the next sync.
+                    record.installed=false;persist(it->first);
+                    remove(dict.get(),it->first.first,it->first.second).wait();
+                }
+                ++it;
+            }
         }
         for(const auto &item:desired){
             auto old=records.find(item.first);
@@ -174,6 +191,10 @@ public:
                 add(dict.get(),item.first.first,item.first.second,option).wait();
             }
             records[item.first].installed=true;persist(item.first);
+        }
+        if(legacy_scores){
+            save(current_ledger_version);
+            legacy_scores=false;
         }
     }
     // The worker is the sole writer. Keep selected vocabulary as learned words

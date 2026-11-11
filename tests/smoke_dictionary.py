@@ -37,6 +37,12 @@ host=Host()
 try:
     # Import before any user key: the loader must not depend on a warm session.
     host.sync(entries)
+    _, baseline = host.query(host.open('quanpin'), 'nihao')
+    unweighted = ('ni,hao', '拟郝', 0)
+    host.sync([*entries, unweighted])
+    _, rows = host.query(host.open('quanpin'), 'nihao')
+    assert rows[0] == baseline[0] and unweighted[1] in rows, rows
+    host.sync(entries)
     for mode,code in [('quanpin','jihengshangjing'),('flypy','jihguhjk'),('natural','jihguhjy')]:
         sid=host.open(mode);_,rows=host.query(sid,code)
         assert rows[:2]==['霁蘅觞璟','霁珩觞璟'],(mode,rows)
@@ -66,7 +72,7 @@ print('PASS: native weight mapping, full/double pinyin, cold import, disable, in
 # Exercise the official dictionary reader and its import_tables through librime.
 user=base/'user'
 (user/'default.custom.yaml').write_text('patch:\n  schema_list:\n    - schema: wetype\n    - schema: wetype_flypy\n')
-(user/'custom.dict.yaml').write_text('---\nname: custom\nversion: "1"\nsort: by_weight\ncolumns: [code, text, weight]\n...\nji heng shang jing\t霁蘅觞璟\t1000\n')
+(user/'custom.dict.yaml').write_text('---\nname: custom\nversion: "1"\nsort: by_weight\ncolumns: [code, text, weight]\n...\nji heng shang jing\t霁蘅觞璟\t1000\nni hao\t拟郝\n')
 (user/'wetype.dict.yaml').write_text('---\nname: wetype\nversion: "1"\nsort: by_weight\nimport_tables: [custom]\n...\n姬\tji\t1\n蘅\theng\t1\n觞\tshang\t1\n璟\tjing\t1\n')
 # Assert deployment itself succeeds with a disabled main dictionary, rather
 # than only checking that input remains available after a deployment error.
