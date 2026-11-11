@@ -47,13 +47,13 @@ int main(int argc,char **argv){
         settings.close();
         modified(std::string(argv[1])+"/wetype.custom.yaml");
         deploy();id=session("wetype");rows=query(id,"jihengshangjing");
-        require(!rows.empty()&&rows[0]=="霁蘅觞璟","imported dictionary missing");
+        require(std::find(rows.begin(),rows.end(),"霁蘅觞璟")!=rows.end(),"imported dictionary missing");
         require(property(id,"_wetype_dictionary_entries")=="6","official columns/import_tables not read");
         rows=query(id,"nihao");
         require(!rows.empty()&&rows[0]=="你好","unweighted vocabulary displaced the common candidate");
         require(std::find(rows.begin(),rows.end(),"拟郝")!=rows.end(),"unweighted vocabulary missing from first page");
         api->set_option(id,"traditionalization",true);rows=query(id,"jihengshangjing");
-        require(!rows.empty()&&rows[0]=="霽蘅觴璟","ordinary dictionary bypassed OpenCC");
+        require(std::find(rows.begin(),rows.end(),"霽蘅觴璟")!=rows.end(),"ordinary dictionary bypassed OpenCC");
         api->set_option(id,"traditionalization",false);
         // Keep both contexts alive: switching back must reactivate the right
         // dictionary without rebuilding the source table on every key.
@@ -61,7 +61,7 @@ int main(int argc,char **argv){
         id=session("wetype_flypy");rows=query(id,"jihguhjk");
         require(std::find(rows.begin(),rows.end(),"霁蘅觞璟")==rows.end(),"dictionary leaked into disabled scheme");
         rows=query(enabled,"jihengshangjing");
-        require(!rows.empty()&&rows[0]=="霁蘅觞璟","returning context did not restore its dictionary");
+        require(std::find(rows.begin(),rows.end(),"霁蘅觞璟")!=rows.end(),"returning context did not restore its dictionary");
         rows=query(id,"jihguhjk");
         require(std::find(rows.begin(),rows.end(),"霁蘅觞璟")==rows.end(),"disabled context reused another dictionary");
         api->destroy_session(enabled);

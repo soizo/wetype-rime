@@ -4,6 +4,7 @@
 #include <dlfcn.h>
 #include <fstream>
 #include <functional>
+#include <set>
 #include <cmath>
 #include <ctime>
 #include <memory>
@@ -29,7 +30,7 @@ class NativeLexicon {
     static_assert(sizeof(Completion)==32);
     struct Present {uint32_t timestamp;bool present;};
     using Pair=std::pair<std::string,std::string>;
-    struct Record {double weight=0;bool owned=false,learned=false,installed=true;};
+    struct Record {double weight=0;bool owned=false,learned=false,installed=true;uint32_t initial_count=0;};
     std::map<Pair,Record> records;
     std::string ledger;
     void *(*instance)()=nullptr;
@@ -44,6 +45,7 @@ class NativeLexicon {
     static constexpr const char *current_ledger_version="WETYPE_LEXICON_3";
     static constexpr const char *legacy_ledger_version="WETYPE_LEXICON_2";
     static constexpr const char *ranked_ledger_version="WETYPE_LEXICON_4";
+    static constexpr const char *relative_ledger_version="WETYPE_LEXICON_5";
     const char *ledger_version=current_ledger_version;
     bool loaded=false;
     template<class T> static void bind(T &fn,const std::map<std::string,uintptr_t> &symbols,const char *name){
@@ -65,8 +67,12 @@ class NativeLexicon {
         std::ofstream out(temporary,std::ios::trunc);
         if(!out)throw std::runtime_error("cannot save dictionary import ledger");
         out<<version<<'\n'<<std::setprecision(17);
-        for(const auto &item:records)out<<"U "<<hex(item.first.first)<<' '<<hex(item.first.second)<<' '
-            <<item.second.weight<<' '<<item.second.owned<<' '<<item.second.learned<<' '<<item.second.installed<<'\n';
+        for(const auto &item:records){
+            out<<"U "<<hex(item.first.first)<<' '<<hex(item.first.second)<<' '
+                <<item.second.weight<<' '<<item.second.owned<<' '<<item.second.learned<<' '<<item.second.installed;
+            if(version==relative_ledger_version)out<<' '<<item.second.initial_count;
+            out<<'\n';
+        }
         out.close();
         if(!out||rename(temporary.c_str(),ledger.c_str()))throw std::runtime_error("cannot replace dictionary import ledger");
     }
@@ -78,7 +84,10 @@ class NativeLexicon {
         std::ofstream out(ledger,std::ios::app);
         auto at=records.find(key);
         out<<std::setprecision(17)<<(at==records.end()?"D ":"U ")<<hex(key.first)<<' '<<hex(key.second);
-        if(at!=records.end())out<<' '<<at->second.weight<<' '<<at->second.owned<<' '<<at->second.learned<<' '<<at->second.installed;
+        if(at!=records.end()){
+            out<<' '<<at->second.weight<<' '<<at->second.owned<<' '<<at->second.learned<<' '<<at->second.installed;
+            if(ledger_version==relative_ledger_version)out<<' '<<at->second.initial_count;
+        }
         out<<'\n';out.close();
         if(!out)throw std::runtime_error("cannot update dictionary import ledger");
     }
@@ -141,13 +150,14 @@ public:
         bind(lookup,symbols,"__ZNK5wxime4data4dict10UserDictV212LookUpByPairENSt3__117basic_string_viewIcNS3_11char_traitsIcEEEES7_");
         if(history_abi)bind(add_with_history,symbols,
             "__ZN5wxime4data4dict10UserDictV24Impl3AddENSt3__117basic_string_viewIcNS4_11char_traitsIcEEEES8_RKNS1_17UserDictAddOptionEjjNS4_8functionIFvS8_S8_PS2_EEE");
-        ledger_version=add_with_history?ranked_ledger_version:current_ledger_version;
+        ledger_version=add_with_history?relative_ledger_version:current_ledger_version;
         std::ifstream state(ledger);std::string version;
         if(state){
             std::getline(state,version);
             if(version==legacy_ledger_version)ledger_version=legacy_ledger_version;
             else if(version==current_ledger_version)ledger_version=current_ledger_version;
             else if(version==ranked_ledger_version)ledger_version=ranked_ledger_version;
+            else if(version==relative_ledger_version)ledger_version=relative_ledger_version;
             else throw std::runtime_error("invalid dictionary import ledger");
             std::string line;
             while(std::getline(state,line)){
@@ -155,7 +165,13 @@ public:
                 if(!(in>>tag>>code>>text))throw std::runtime_error("invalid dictionary import ledger");
                 auto key=Pair{unhex(code),unhex(text)};
                 if(tag=="D")records.erase(key);
-                else if(tag=="U"&&in>>row.weight>>row.owned>>row.learned>>row.installed&&std::isfinite(row.weight))records[key]=row;
+                else if(tag=="U"&&in>>row.weight>>row.owned>>row.learned>>row.installed&&std::isfinite(row.weight)){
+                    if(ledger_version==relative_ledger_version){
+                        if(!(in>>row.initial_count)||row.initial_count>3)
+                            throw std::runtime_error("invalid dictionary import count");
+                    }else if(ledger_version==ranked_ledger_version&&row.weight==0)row.initial_count=1;
+                    records[key]=row;
+                }
                 else throw std::runtime_error("invalid dictionary import ledger");
                 if(in>>extra||records.size()>10000)throw std::runtime_error("invalid dictionary import ledger");
             }
@@ -173,12 +189,28 @@ public:
     void sync(const std::vector<Entry> &entries){
         if(!loaded)throw std::runtime_error("ordinary dictionary API unavailable");
         auto dict=dictionary();
-        const char *target_version=add_with_history||ledger_version==ranked_ledger_version
-            ?ranked_ledger_version:current_ledger_version;
+        const char *target_version=ledger_version;
+        if(add_with_history)target_version=relative_ledger_version;
+        else if(ledger_version==legacy_ledger_version)target_version=current_ledger_version;
         const bool refresh_scores=ledger_version!=target_version;
         std::map<Pair,double> desired;
         for(const auto &entry:entries){auto key=Pair{entry.code,entry.text};
             auto at=desired.find(key);if(at==desired.end()||at->second<entry.weight)desired[key]=entry.weight;}
+        // Keep at most three low-frequency levels per pinyin code. Equal
+        // weights share a level and magnitudes do not imply recent selections.
+        std::map<std::string,std::set<double>> desired_weights;
+        if(add_with_history){
+            for(const auto &item:desired)desired_weights[item.first.first].insert(item.second);
+        }
+        auto initial_count=[](const std::set<double> &weights,double weight){
+            uint32_t count=1;
+            // The largest weight gets the strongest of the available levels.
+            for(auto it=weights.rbegin();it!=weights.rend()&&count<3;++it){
+                if(*it<=weight)break;
+                ++count;
+            }
+            return std::min<uint32_t>(weights.size(),3)+1-count;
+        };
         for(auto it=records.begin();it!=records.end();){
             auto wanted=desired.find(it->first);
             bool changed=wanted!=desired.end()&&wanted->second!=it->second.weight;
@@ -190,7 +222,10 @@ public:
                 }else{auto key=it->first;it=records.erase(it);persist(key);}
             }else{
                 auto &record=it->second;
-                if(refresh_scores&&record.owned&&!record.learned&&record.weight==0&&
+                const bool score_changed=add_with_history
+                    ?record.initial_count!=initial_count(desired_weights.at(it->first.first),record.weight)
+                    :refresh_scores&&record.weight==0;
+                if(score_changed&&record.owned&&!record.learned&&
                    lookup(dict.get(),it->first.first,it->first.second).present){
                     // Persist the pending install first so an interrupted
                     // migration can restore the word on the next sync.
@@ -209,8 +244,8 @@ public:
                 persist(item.first);
             }
             if(!existing){
-                alignas(8) unsigned char option[24]={};float score=initial_score(item.second);memcpy(option+4,&score,sizeof(score));
-                if(add_with_history&&item.second==0){
+                alignas(8) unsigned char option[24]={};
+                if(add_with_history){
                     // Public Add records a use at the current time. Seed a
                     // low-frequency entry whose recency bonus has decayed.
                     void *impl=nullptr;
@@ -218,8 +253,13 @@ public:
                     if(!impl)throw std::runtime_error("native pinyin user dictionary implementation unavailable");
                     constexpr std::time_t history_age=30*24*60*60;
                     auto timestamp=static_cast<uint32_t>(std::time(nullptr)-history_age);
-                    add_with_history(impl,item.first.first,item.first.second,option,1,timestamp,{}).wait();
-                }else add(dict.get(),item.first.first,item.first.second,option).wait();
+                    auto count=initial_count(desired_weights.at(item.first.first),item.second);
+                    add_with_history(impl,item.first.first,item.first.second,option,count,timestamp,{}).wait();
+                    records[item.first].initial_count=count;
+                }else{
+                    float score=initial_score(item.second);memcpy(option+4,&score,sizeof(score));
+                    add(dict.get(),item.first.first,item.first.second,option).wait();
+                }
             }
             records[item.first].installed=true;persist(item.first);
         }

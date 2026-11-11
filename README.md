@@ -85,7 +85,7 @@ To enable it across the supplied pinyin schemes, use `base/translator/dictionary
 ```
 
 - **Default import weight is `0`.** Omit the third column or write `0` to let an unlearned word start as low-frequency vocabulary on the validated engine. WetypeRime seeds one use dated 30 days earlier. WeType calculates its rank from the input, context and learning.
-- **Positive weights boost new words.** The initial bias is one hour per `log2(1 + weight)`, capped at 14 days. For example, `100` adds about 6.7 hours. A weight does not guarantee a candidate position. Editing a weight leaves existing learning intact. The candidate interface used by WetypeRime provides the order of built-in words, so there is no built-in weight on this scale to copy into a personal entry.
+- **Positive weights express a preference among words with the same full pinyin.** On the validated engine, larger values receive a stronger initial preference within that group. For example, `200`, `199` and `198` form three levels, with the same effect as `3`, `2` and `1`. WeType ranks the words alongside built-in candidates and adjusts their order through learning. The built-in scores use WeType's own scale.
 
 Use `custom_phrase.txt` for exact-code shortcuts. Its weights apply to the shortcut table and use a separate scale. See [dictionary configuration](docs/dictionaries.md#weights-and-learning) and [custom phrases](docs/user-words.md).
 

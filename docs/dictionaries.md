@@ -94,20 +94,22 @@ small personal lists.
 
 ## Weights and learning
 
-On the verified macOS 3.0.1 (680) engine build, entries with an omitted or
-zero weight enter the native ranker as low-frequency vocabulary with a
-30-day-old initial history entry. WeType ranks them alongside other candidates
-using the input and available context. Other engine builds use the standard
-native insertion method with zero extra weight. An explicit positive weight
-adds an initial native ranking bias of one hour per `log2(1 + weight)`, capped at fourteen
-days. Weights from 0 through 1,000,000,000,000 are accepted. Native
-floating-point precision can merge small differences. If multiple tables
-contain the same text and code, the largest weight is used.
+On the verified macOS 3.0.1 (680) engine build, the weight expresses an initial
+preference among entries with the same full pinyin. Omitted weights count as
+zero. The engine receives up to three low-frequency levels for each code,
+seeded with a 30-day-old initial history entry. Equal weights share a level.
+When there are more than three distinct weights, the two highest receive
+separate levels and the remaining weights share the lowest level. WeType
+ranks the entries alongside built-in candidates using input, context and
+learning.
 
-Unchanged deployment preserves existing scores. Changing the weight of an
-unlearned import replaces its initial native record. The first import after
-upgrading refreshes the initial scores of existing unlearned zero-weight
-entries. WeType keeps learned entries and their scores.
+Other engine builds use the standard native insertion method, with a
+logarithmic recency bias for positive weights. Weights from 0 through
+1,000,000,000,000 are accepted. If multiple tables contain the same text and
+code, the largest weight is used.
+
+Changing a weight or the group it belongs to can change the initial scores
+of unlearned imports. Existing WeType learning is preserved.
 
 Disabling a table removes its unlearned imported records. Selecting an imported
 word retains it as native learning, so it may remain available after disabling
