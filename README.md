@@ -4,7 +4,7 @@ Offline WeType engine integration for Rime on Apple Silicon macOS.
 
 WetypeRime runs WeType's local engine, dictionaries and learning through [Squirrel](https://github.com/rime/squirrel). The displayed schemes use names such as **微信输入** and **微信拼音**; the repository name and Python module remain `wetype-rime` and `wetype` for compatibility.
 
-This is an experimental, source-only macOS release. It does not include or download WeType's proprietary engine or dictionaries.
+Installation uses the engine and dictionaries from your local WeType app.
 
 ## Install
 
@@ -67,6 +67,27 @@ Edit the installed `<schema_id>.custom.yaml`, then deploy Squirrel. Shared defau
 Detailed guides cover [scheme options](data/README.md), [user words and candidate preferences](docs/user-words.md), [optional dictionaries](docs/dictionaries.md), [local expressions](docs/expressions.md), [native cell dictionaries](docs/native-cell-dictionaries.md) and [Rime extensions](examples/rime-extensions/README.md).
 
 Run `python3 -m wetype sync-config` to update supplied presets without rebuilding the adapter or recopying the engine. Personal configuration and dictionary files are preserved.
+
+### Personal vocabulary and weights
+
+Use `custom.dict.yaml` for words that should participate in WeType's pinyin ranking. The supplied `wetype.dict.yaml` imports it. Enable the dictionary for a scheme in its `.custom.yaml` file, then deploy Squirrel.
+
+```yaml
+patch:
+  translator/dictionary: wetype
+```
+
+To enable it across the supplied pinyin schemes, use `base/translator/dictionary: wetype` in the shared patch. Use full pinyin separated by spaces even for double pinyin. Separate the text, pinyin and optional weight with literal tabs.
+
+```text
+起乩	qi ji
+专业术语	zhuan ye shu yu	100
+```
+
+- **Default weight is `0`.** Omit the third column or write `0` to let an unlearned word start as low-frequency vocabulary on the validated engine. WetypeRime seeds one use dated 30 days earlier. WeType calculates its rank from the input, context and learning.
+- **Positive weights boost new words.** The initial bias is one hour per `log2(1 + weight)`, capped at 14 days. For example, `100` adds about 6.7 hours. A weight does not guarantee a candidate position. Editing a weight leaves existing learning intact.
+
+Use `custom_phrase.txt` for exact-code shortcuts. Its weights apply to the shortcut table and use a separate scale. See [dictionary configuration](docs/dictionaries.md#weights-and-learning) and [custom phrases](docs/user-words.md).
 
 ## Privacy and Compatibility
 
