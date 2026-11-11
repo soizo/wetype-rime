@@ -84,8 +84,8 @@ To enable it across the supplied pinyin schemes, use `base/translator/dictionary
 专业术语	zhuan ye shu yu	100
 ```
 
-- **Default weight is `0`.** Omit the third column or write `0` to let an unlearned word start as low-frequency vocabulary on the validated engine. WetypeRime seeds one use dated 30 days earlier. WeType calculates its rank from the input, context and learning.
-- **Positive weights boost new words.** The initial bias is one hour per `log2(1 + weight)`, capped at 14 days. For example, `100` adds about 6.7 hours. A weight does not guarantee a candidate position. Editing a weight leaves existing learning intact.
+- **Default import weight is `0`.** Omit the third column or write `0` to let an unlearned word start as low-frequency vocabulary on the validated engine. WetypeRime seeds one use dated 30 days earlier. WeType calculates its rank from the input, context and learning.
+- **Positive weights boost new words.** The initial bias is one hour per `log2(1 + weight)`, capped at 14 days. For example, `100` adds about 6.7 hours. A weight does not guarantee a candidate position. Editing a weight leaves existing learning intact. The candidate interface used by WetypeRime provides the order of built-in words, so there is no built-in weight on this scale to copy into a personal entry.
 
 Use `custom_phrase.txt` for exact-code shortcuts. Its weights apply to the shortcut table and use a separate scale. See [dictionary configuration](docs/dictionaries.md#weights-and-learning) and [custom phrases](docs/user-words.md).
 
