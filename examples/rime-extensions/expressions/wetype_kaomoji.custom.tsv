@@ -1,0 +1,4 @@
+# Personal kaomoji additions; merged over the supplied wetype_kaomoji.tsv.
+# Format: word<TAB>kaomoji, one per line. Repeat a word for alternatives.
+# Example:
+# 开心	(ﾉ◕ヮ◕)ﾉ*:･ﾟ✧

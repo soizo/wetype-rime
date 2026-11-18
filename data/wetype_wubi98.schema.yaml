@@ -16,6 +16,13 @@ switches:
     reset: 1
   - name: wetype_wubi_comment
     reset: 1
+  # Hidden switches for the external expression tables; patch states to show them.
+  - name: emoji
+    reset: 1
+  - name: kaomoji
+    reset: 1
+  - name: symbol_emoji
+    reset: 1
 wetype:
   __include: wetype_common:/settings
   mode: wubi98

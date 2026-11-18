@@ -30,6 +30,10 @@ static RimeSessionId session(const char *schema) {
     auto id = api->create_session();
     require(id && api->select_schema(id, schema), "schema unavailable");
     api->set_option(id, "ascii_mode", false);
+    // Index-based baselines must not depend on the shipped expression tables.
+    api->set_option(id, "emoji", false);
+    api->set_option(id, "kaomoji", false);
+    api->set_option(id, "symbol_emoji", false);
     return id;
 }
 static std::string read(const std::string &path) {

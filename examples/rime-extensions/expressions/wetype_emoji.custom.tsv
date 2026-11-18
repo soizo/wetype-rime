@@ -1,0 +1,4 @@
+# Personal Unicode Emoji additions; merged over the supplied wetype_emoji.tsv.
+# Format: word<TAB>emoji, one per line. Repeat a word for alternatives.
+# Example:
+# 开心	🥳

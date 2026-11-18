@@ -1,13 +1,13 @@
 # Merge into the relevant <schema_id>.custom.yaml, then deploy.
-# Expression options start enabled. Existing Unicode Emoji settings remain.
+# Switches kaomoji and symbol_emoji back to the native engine recommendations.
+# The external Lua tables (wetype_kaomoji.tsv / wetype_symbols.tsv) step aside
+# automatically while the native categories are active, so nothing duplicates.
+# The schemes already define the hidden kaomoji/symbol_emoji switches; this
+# patch only binds them to the native engine and adds the personal shortcut
+# tables below.
 patch:
   wetype/kaomoji_option: kaomoji
   wetype/symbol_emoji_option: symbol_emoji
-  "switches/+":
-    - name: kaomoji
-      reset: 1
-    - name: symbol_emoji
-      reset: 1
   "engine/translators/+":
     - wetype_expression_translator@kaomoji
     - wetype_expression_translator@symbol_emoji

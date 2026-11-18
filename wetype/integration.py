@@ -88,11 +88,12 @@ def sync_configs(rime_dir: Path) -> Path | None:
     source = ROOT / 'data'
     required = [source / (schema + '.schema.yaml') for schema in SCHEMAS]
     required.extend([source / 'wetype_common.yaml', source / 'lua/wetype_bootstrap.lua',
-                     source / 'lua/wetype_candidate_rules.lua'])
+                     source / 'lua/wetype_candidate_rules.lua', source / 'lua/wetype_expressions.lua'])
     for path in required:
         if not path.is_file():
             raise ValueError(f'missing scheme configuration: {path}')
-    files = sorted([*source.glob('*.yaml'), *source.glob('*.txt'), *source.glob('lua/**/*.lua')])
+    files = sorted([*source.glob('*.yaml'), *source.glob('*.txt'), *source.glob('*.tsv'),
+                    *source.glob('lua/**/*.lua')])
     if any(path.name == 'wetype.runtime.yaml' for path in files):
         raise ValueError('wetype.runtime.yaml is reserved for installation-specific bindings')
     backup = None
@@ -183,7 +184,8 @@ def stage(rime_dir: Path, runtime: Path | None = None, engine: Path = DEFAULT_EN
     sync_configs(rime_dir)
     # These are ordinary personal Rime tables. Install starters once and keep
     # subsequent edits outside the checkout and untouched during upgrades.
-    for name in ('kaomoji.txt', 'symbol_emoji.txt'):
+    for name in ('kaomoji.txt', 'symbol_emoji.txt',
+                 'wetype_emoji.custom.tsv', 'wetype_kaomoji.custom.tsv', 'wetype_symbols.custom.tsv'):
         target = rime_dir / name
         if not target.exists():
             atomic_copy(ROOT / 'examples/rime-extensions/expressions' / name, target)

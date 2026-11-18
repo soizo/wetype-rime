@@ -121,6 +121,10 @@ def main():
         session = create()
         assert session and select(session, schema.encode()), 'cannot select configured scheme'
         option(session, b'ascii_mode', 0)
+        # Exact-position assertions below must not depend on the shipped
+        # expression tables; features re-enable only what they test.
+        for expression in (b'emoji', b'kaomoji', b'symbol_emoji'):
+            option(session, expression, 0)
         def expect(code, expected, final_key=' '):
             for letter in code:
                 assert key(session, ord(letter), 0), f'key rejected: {letter}'

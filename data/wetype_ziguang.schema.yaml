@@ -12,6 +12,13 @@ switches:
   - name: ascii_mode
     reset: 0
     states: [中文, 英文]
+  # Hidden switches for the external expression tables; patch states to show them.
+  - name: emoji
+    reset: 1
+  - name: kaomoji
+    reset: 1
+  - name: symbol_emoji
+    reset: 1
 wetype:
   __include: wetype_common:/settings
   mode: ziguang

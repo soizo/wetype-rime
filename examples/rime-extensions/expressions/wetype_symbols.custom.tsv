@@ -1,0 +1,4 @@
+# Personal symbol additions; merged over the supplied wetype_symbols.tsv.
+# Format: word<TAB>symbol, one per line. Repeat a word for alternatives.
+# Example:
+# 星星	✴️

@@ -1,7 +1,6 @@
 # 可选：由 WeType 本地引擎推荐 Unicode Emoji，保留其排序和选词反馈。
+# 方案已内置隐藏的 emoji 开关（默认开）；绑定后外部 wetype_emoji.tsv
+# 表会自动让位给原生推荐，不会重复。要在方案菜单中显示开关，可自行
+# patch 一个带 states 的可见开关。
 patch:
   wetype/emoji_option: emoji
-  "switches/@next":
-    name: emoji
-    reset: 1
-    states: [Emoji关, Emoji开]

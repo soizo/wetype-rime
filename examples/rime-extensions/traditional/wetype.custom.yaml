@@ -11,4 +11,4 @@ patch:
     option_name: wetype_traditional
     opencc_config: s2t.json
     tips: none
-    excluded_types: [user_table]
+    excluded_types: [user_table, lua_emoji, lua_kaomoji, lua_symbols]
