@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Serve emoji, kaomoji and symbols from hand-maintained editable TSV tables through three Lua filters that match simplified candidate text. Merge personal `.custom.tsv` overlays with hot reload, gate each category by its existing hidden switch, and step aside automatically while the matching native engine category is bound.
+
 - Use Rime's standard table translator for custom phrases in every supplied scheme, allowing multiple exact codes for the same phrase.
 
 - Send semicolons that cannot act as a spelling key to Rime’s punctuation handler. Keep engine errors in diagnostics and allow Return to commit the original input.

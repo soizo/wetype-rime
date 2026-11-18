@@ -42,28 +42,31 @@ A scheme's own patch takes precedence over shared defaults. The unified scheme's
 ## Menu and configuration preferences
 
 Keep Chinese/English, script conversion, full-width/half-width, punctuation and
-Emoji in the menu where the scheme provides them. Fuzzy spelling, kaomoji,
-symbol expressions, Wubi pinyin assistance and Wubi code comments use hidden
-Rime switches. They retain their current defaults and option names; omitting
-`states` hides them from the menu without disabling the feature.
+Emoji in the menu where the scheme provides them. Fuzzy spelling, the external
+expression tables (Emoji, kaomoji, symbols), Wubi pinyin assistance and Wubi
+code comments use hidden Rime switches. They retain their current defaults and
+option names; omitting `states` hides them from the menu without disabling the
+feature.
 
 Change a hidden switch's `reset` to `1` (enabled) or `0` (disabled) in a personal
-scheme patch, then deploy. Rime list indices are zero-based. For the generated
-mainland Xiaohe scheme with the supplied personal expression patch:
+scheme patch, then deploy. Rime list indices are zero-based. In the unified
+scheme the expression switches are `emoji` (`@4`), `kaomoji` (`@5`) and
+`symbol_emoji` (`@6`):
 
 ```yaml
 patch:
-  switches/@5/reset: 0  # Fuzzy spelling: precise input by default.
-  switches/@6/reset: 1  # Kaomoji.
-  switches/@7/reset: 1  # Symbol expressions.
+  switches/@4/reset: 0  # Unicode Emoji table off.
+  switches/@5/reset: 1  # Kaomoji.
+  switches/@6/reset: 1  # Symbol expressions.
 ```
 
-Merge these into `wetype_flypy_gov.custom.yaml`. If personal patches change the
-switch order, check `build/wetype_flypy_gov.schema.yaml` for the current indices;
-edit only the personal patch, not that generated file. In the unified scheme
-and standalone Wubi schemes, indices `1` and `2` control pinyin assistance and
-code comments respectively. Both default to `1`. Optional expression and fuzzy
-examples show the named hidden switches and their defaults.
+Merge these into `wetype.custom.yaml`. Standalone pinyin schemes place the same
+three switches at indices `1`–`3`; standalone Wubi schemes at `3`–`5`. If
+personal patches or generated variants change the switch order, check the
+deployed schema (for example `build/wetype_flypy_gov.schema.yaml`) for the
+current indices; edit only the personal patch, not that generated file. In the
+unified scheme and standalone Wubi schemes, indices `1` and `2` control pinyin
+assistance and code comments respectively. Both default to `1`.
 
 ## Editor context
 
@@ -112,9 +115,9 @@ Changing YAML or a personal text table does not rebuild the component or recopy 
 
 The [examples](../examples/rime-extensions/README.md) use ordinary Rime patches for phrases, exact-input filters, script conversion, expressions and dictionaries. Keep the native loader, `wetype_speller` and `wetype_translator` in the processing chain.
 
-Native Emoji recommendations bind the Rime option named by `wetype/emoji_option`. No OpenCC Emoji map is needed. The mainland variant enables this by default; the 12 base schemes do not bind an Emoji switch. Changing the option clears composition and opens a new native session, retaining native ranking and selection feedback.
+Native Emoji recommendations bind the Rime option named by `wetype/emoji_option`. No OpenCC Emoji map is needed. The mainland variant enables this by default; the 12 base schemes do not bind it, so the external Emoji table serves the shared `emoji` option there. Binding the option switches the external table aside automatically. Changing a bound option clears composition and opens a new native session, retaining native ranking and selection feedback.
 
-[Local expressions](../docs/expressions.md) add independent kaomoji and symbol options, enabled by default in the expression patch. Edit `kaomoji.txt` and `symbol_emoji.txt` with ordinary Rime text-table rows. Personal expressions use the official table backend and retain `user_table` literal-output exclusions. Emoji Plus remains prohibited and cannot be enabled through configuration.
+[Local expressions](../docs/expressions.md) are external editable tables by default: `wetype_emoji.tsv`, `wetype_kaomoji.tsv` and `wetype_symbols.tsv` map simplified words to expressions through three Lua filters, with personal `.custom.tsv` overlays merged on top and hot-reloaded. The tables ship as hand-maintained defaults; edit them in the checkout or install them directly. The optional expression patch additionally binds the native kaomoji/symbol engine recommendations and installs the literal shortcut-code tables `kaomoji.txt` and `symbol_emoji.txt`, which use the official table backend and retain `user_table` literal-output exclusions. Emoji Plus remains prohibited and cannot be enabled through configuration.
 
 [Optional dictionaries](../docs/dictionaries.md) use `translator/dictionary`, ordinary `*.dict.yaml` files and `import_tables`. The setting defaults to `null`. Enable the empty `wetype.dict.yaml` and `custom.dict.yaml` starters with `translator/dictionary: wetype`, add full-pinyin entries and deploy. WeType handles matching, initial weights and learning. Disable imports with `null`; existing dictionary files are preserved on upgrade.
 

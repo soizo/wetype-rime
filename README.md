@@ -52,6 +52,8 @@ The unified scheme provides full pinyin, seven double-pinyin layouts and three W
 
 Edit `wetype-candidate-rules.custom.yaml` in your Rime user directory to pin or block WeType candidates. Candidate-management shortcuts are disabled by default. See [candidate rules](docs/user-words.md#candidate-pinning-and-blocking).
 
+Emoji, kaomoji and symbols come from editable tables (`wetype_emoji.tsv`, `wetype_kaomoji.tsv`, `wetype_symbols.tsv`) in your Rime user directory, shipped as hand-maintained defaults. Add personal rows in the matching `.custom.tsv` overlays. See [local expressions](docs/expressions.md).
+
 To disable WetypeRime while keeping its engine resources and learning data:
 
 ```sh
