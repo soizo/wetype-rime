@@ -27,16 +27,11 @@ base:
       - wetype_translator
       - table_translator@custom_phrase
     filters:
-      # External expression tables match the simplified engine text, so they
-      # must run before any user-added OpenCC conversion. A filter listed
-      # later inserts its expressions closer to the word, so the arrangement
-      # below displays symbols first, then Emoji, then kaomoji.
+      # Expression filters match simplified text, so they run before OpenCC.
       - lua_filter@*wetype_expressions*kaomoji
       - lua_filter@*wetype_expressions*emoji
       - lua_filter@*wetype_expressions*symbols
       - lua_filter@*wetype_candidate_rules*filter
-  # Candidate page size follows Rime's default (menu/page_size in default.yaml
-  # or the user's default.custom.yaml); set it there or in a scheme patch.
   speller:
     alphabet: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ;"
     delimiter: "'"
