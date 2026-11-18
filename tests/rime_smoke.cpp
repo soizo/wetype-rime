@@ -317,6 +317,9 @@ int main(int argc,char **argv){
         }
         require(api->select_schema(id, "wetype"), "cannot restore unified wetype");
         api->set_option(id, "ascii_mode", false);
+        // The candidate-count assertions below predate the expression tables;
+        // keep those filters off so paging and learning ranks stay deterministic.
+        api->set_option(id,"emoji",false);api->set_option(id,"kaomoji",false);api->set_option(id,"symbol_emoji",false);
         for(auto sample:{std::pair<const char *,const char *>{"nihao","ni'hao"},
                          {"nihaozhongguo","ni'hao'zhong'guo"},{"xian","xian"},
                          {"xi'an","xi'an"},{"beijin","bei'jin"},{"codex","codex"},{"nh","n'h"}}){

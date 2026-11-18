@@ -147,6 +147,9 @@ class Translator:public rime::Translator {
     bool fuzzy_enabled=false;
     RimeFuzzy fuzzy;
     std::vector<uint64_t> fuzzy_sessions;
+    // Display counts default to the historical values; override via wetype/*.
+    size_t fuzzy_limit=3;
+    size_t head_window=3;
     RimeUserWords user_words;
     std::shared_future<void> words_preparing;
     bool words_valid=false;
@@ -313,10 +316,10 @@ class Translator:public rime::Translator {
                 if(custom_phrase)out->Append(std::make_shared<rime::ShadowCandidate>(candidate,"user_table"));
                 else out->Append(candidate);
             };
-            // Custom phrases precede the first three ordinary exact candidates,
-            // followed by bounded fuzzy choices.
+            // Custom phrases precede the first head_window ordinary exact
+            // candidates, followed by bounded fuzzy choices.
             // Each branch owns a separate native session and selection ticket.
-            size_t head=variants.empty()?result.rows.size():std::min<size_t>(phrases+3,result.rows.size());
+            size_t head=variants.empty()?result.rows.size():std::min<size_t>(phrases+head_window,result.rows.size());
             for(size_t i=0;i<head;++i)append(result.rows[i],result.ticket,session,false,configured_phrase(result.rows[i],input));
             ctx->set_property("_wetype_fuzzy_variants",std::to_string(variants.size()));
             for(size_t i=0;i<variants.size();++i){
@@ -331,7 +334,7 @@ class Translator:public rime::Translator {
                         bool custom_phrase=configured_phrase(row,variants[i]);
                         row.cover=input.size();row.preedit=input;
                         append(row,alternative.ticket,fuzzy_sessions[i],true,custom_phrase);
-                        if(++count==3)break;
+                        if(++count==fuzzy_limit)break;
                     }
                 }catch(const std::exception &e){ctx->set_property("_wetype_fuzzy_error",e.what());}
             }
@@ -349,6 +352,9 @@ public:
         // candidate/context operations remain on the frontend's own thread.
         auto ctx=engine_->context();
         engine_->schema()->config()->GetBool("wetype/surrounding",&surrounding_enabled);
+        int count=0;
+        if(engine_->schema()->config()->GetInt("wetype/fuzzy_candidates",&count)&&count>0)fuzzy_limit=static_cast<size_t>(count);
+        if(engine_->schema()->config()->GetInt("wetype/head_candidates",&count)&&count>0)head_window=static_cast<size_t>(count);
         try{context_simplifier.initialise(engine_);}
         catch(const std::exception &e){ctx->set_property("_wetype_context_error",e.what());}
         try{user_words.load(engine_->schema()->config());words_valid=true;ctx->set_property("_wetype_user_words_error","");}

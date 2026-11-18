@@ -33,8 +33,8 @@ base:
       - lua_filter@*wetype_expressions*kaomoji
       - lua_filter@*wetype_expressions*symbols
       - lua_filter@*wetype_candidate_rules*filter
-  menu:
-    page_size: 8
+  # Candidate page size follows Rime's default (menu/page_size in default.yaml
+  # or the user's default.custom.yaml); set it there or in a scheme patch.
   speller:
     alphabet: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ;"
     delimiter: "'"

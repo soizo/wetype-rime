@@ -48,6 +48,11 @@ code comments use hidden Rime switches. They retain their current defaults and
 option names; omitting `states` hides them from the menu without disabling the
 feature.
 
+The schemes do not force a candidate page size: `menu/page_size` follows Rime's
+default, so set it in `default.custom.yaml` (all schemes) or a scheme patch.
+Display counts are likewise ordinary settings with defaults —
+`wetype/head_candidates` and `wetype/fuzzy_candidates` (both default to three).
+
 Change a hidden switch's `reset` to `1` (enabled) or `0` (disabled) in a personal
 scheme patch, then deploy. Rime list indices are zero-based. In the unified
 scheme the expression switches are `emoji` (`@4`), `kaomoji` (`@5`) and
@@ -135,4 +140,4 @@ algebra:
 
 The mainland variant configures precise/fuzzy input through a hidden `wetype_fuzzy` switch and defaults to precise input (fuzzy spelling off). The other base schemes can opt in using the [fuzzy patch](../examples/rime-extensions/fuzzy/wetype.custom.yaml). Full pinyin `qin` and Xiaohe `qb` can then include `qing` candidates such as 请 with the comment 模糊. Librime performs the spelling algebra; WeType's fuzzy flags stay disabled.
 
-The original first three candidates remain ahead of deduplicated fuzzy results. Branches retain their native session, candidate identifiers and selection feedback. Fuzzy additions require complete lowercase syllables, at most 32 input characters, two fuzzy syllables per path and three expanded spellings. Branch candidates cover the full input; the original path retains partial selection. Uppercase, unsupported layouts, unrecognised syllables and longer input continue on the native path. Changing the option clears composition. Subsequent rule edits need only deployment.
+The original first ordinary candidates remain ahead of deduplicated fuzzy results; that head window defaults to three and is set by `wetype/head_candidates`, while each fuzzy branch contributes up to `wetype/fuzzy_candidates` (default three) candidates. Both are ordinary schema settings, overridable in a personal patch. Branches retain their native session, candidate identifiers and selection feedback. Fuzzy additions require complete lowercase syllables, at most 32 input characters, two fuzzy syllables per path and three expanded spellings. Branch candidates cover the full input; the original path retains partial selection. Uppercase, unsupported layouts, unrecognised syllables and longer input continue on the native path. Changing the option clears composition. Subsequent rule edits need only deployment.

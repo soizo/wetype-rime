@@ -33,7 +33,7 @@ stage(user,runtime,copy_engine=False)
 # Exercise a file-only opt-out alongside the enabled shared default.
 (user/'wetype_quanpin.custom.yaml').write_text('patch:\n  wetype/surrounding: false\n')
 if args.user_profile:register_scheme(user, SCHEMAS)
-else:(user/'default.custom.yaml').write_text('patch:\n  schema_list:\n'+''.join('    - schema: '+schema+'\n' for schema in SCHEMAS)+SAVE_OPTIONS_PATCH)
+else:(user/'default.custom.yaml').write_text('patch:\n  # The smoke test observes several candidates on one page; the schemes\n  # themselves no longer force a page size.\n  menu:\n    page_size: 8\n  schema_list:\n'+''.join('    - schema: '+schema+'\n' for schema in SCHEMAS)+SAVE_OPTIONS_PATCH)
 logs.mkdir()
 subprocess.run(['/usr/bin/clang++','-std=c++17','-fobjc-arc','-c',str(ROOT/'tests/imk_fixture.mm'),
                 '-o',str(ROOT/'build/imk-fixture.o')],check=True)
