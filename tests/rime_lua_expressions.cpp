@@ -45,11 +45,11 @@ int main(int argc,char **argv){
   auto menu=rows(id,"ceshi");
   require(menu.size()>=4,"expected the fixture expressions beside the word");
   require(menu[0].first=="测试","word candidate lost the first position");
-  require(menu[1].first=="※"&&menu[2].first=="测试(╯°□°)╯"&&menu[3].first=="🍄","expression filter order incorrect");
-  require(menu[2].second=="测试","kaomoji comment must name the source word");
-  require(menu[1].second.empty()&&menu[3].second.empty(),"symbol/emoji candidates must stay uncommented");
+  require(menu[1].first=="※"&&menu[2].first=="🍄"&&menu[3].first=="测试(╯°□°)╯","expression filter order incorrect");
+  require(menu[3].second=="测试","kaomoji comment must name the source word");
+  require(menu[1].second.empty()&&menu[2].second.empty(),"symbol/emoji candidates must stay uncommented");
   // Selecting an expression commits its literal text.
-  require(api->select_candidate(id,3),"expression selection failed");
+  require(api->select_candidate(id,2),"expression selection failed");
   require(committed(id)=="🍄","expression commit changed text");
   // Options gate each category independently.
   api->set_option(id,"emoji",false);require(!contains(rows(id,"ceshi"),"🍄"),"disabled emoji remained");
@@ -60,6 +60,10 @@ int main(int argc,char **argv){
   // Personal overlays hot-reload when their bytes change; no redeploy needed.
   {std::ofstream out(user+"/wetype_emoji.custom.tsv",std::ios::app);out<<"测试\t🎃\n";}
   menu=rows(id,"ceshi");require(contains(menu,"🎃"),"edited personal table not hot-reloaded");
+  // Hybrid matching: a /pattern/ key is a Lua pattern, not an exact literal.
+  {std::ofstream out(user+"/wetype_emoji.custom.tsv",std::ios::app);out<<"/^测/\t🧪\n";}
+  require(contains(rows(id,"ceshi"),"🧪"),"Lua pattern key did not match 测试");
+  require(!contains(rows(id,"nihao"),"🧪"),"pattern leaked to a non-matching input");
   api->destroy_session(id);
 
   // Phase 2: binding the native engine must switch the Lua tables aside, and

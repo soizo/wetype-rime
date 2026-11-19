@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Add hybrid pattern matching to the external expression tables: a plain key stays an exact literal (hash) match, while a key wrapped in `/.../` is a Lua pattern matched with `string.find`, so one pattern can cover many words. Pattern keys are scanned per candidate, separate from the literal hash, to preserve typing speed; malformed patterns are skipped and reported. Update the expression acceptance test for the current filter order and cover pattern matching.
+
 - Stop forcing display preferences in the schemes. Candidate page size now follows Rime's `menu/page_size` default instead of a hardcoded eight, and the fuzzy head window and per-branch fuzzy candidate count become ordinary settings (`wetype/head_candidates`, `wetype/fuzzy_candidates`, both defaulting to three) rather than fixed constants.
 
 - Serve emoji, kaomoji and symbols from hand-maintained editable TSV tables through three Lua filters that match simplified candidate text. Merge personal `.custom.tsv` overlays with hot reload, gate each category by its existing hidden switch, and step aside automatically while the matching native engine category is bound.

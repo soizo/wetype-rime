@@ -34,6 +34,23 @@ soon as the file bytes change — normally on the next keystroke, without
 redeploying. Supplied tables refresh through `python3 -m wetype sync-config`
 like other presets; overlays and other personal files are preserved.
 
+Matching is hybrid. A plain key is an exact literal match (a fast hash lookup).
+A key wrapped in `/.../` is instead a [Lua pattern](https://www.lua.org/manual/5.4/manual.html#6.4.1)
+matched against the candidate text with `string.find`, so one pattern can cover
+many words:
+
+```text
+/.*心$	❤️	matches any candidate ending in 心
+/开心/	😄	matches any candidate containing 开心
+/^测/	🧪	matches any candidate starting with 测
+```
+
+Literal keys stay exact; only `/.../` keys are scanned as patterns, so keep the
+pattern keys few to avoid per-candidate overhead. Lua patterns support `.^$[]%a%d*+-?()`
+but not `|`, `{n,m}` or lookahead. A malformed pattern is skipped and reported
+through `_wetype_expressions_error`. Plain keys containing pattern metacharacters
+(such as `科科斯(基林)群岛`) remain literal because they are not wrapped in `/.../`.
+
 The tables are ordinary source files: edit the checkout's `data/wetype_*.tsv`
 to change the default for new installations, or edit the installed copies
 directly. They carry no engine resources, network data or personal learning.

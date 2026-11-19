@@ -9,6 +9,12 @@
 -- Personal rows are merged over the supplied tables; edits apply after the
 -- next deploy (files are re-read when their bytes change).
 --
+-- Matching is hybrid: a plain key is an exact literal match (hash lookup).
+-- A key wrapped in /.../ is a Lua pattern matched with string.find, e.g.
+--   /.*心$	❤️   matches any candidate ending in 心
+--   /开心/	😄   matches any candidate containing 开心
+-- Keep pattern keys few; they are scanned per candidate, literal keys are not.
+--
 -- Each filter is gated by its Rime option (emoji / kaomoji / symbol_emoji)
 -- and steps aside automatically while the matching native engine category is
 -- active (_wetype_expression_flags), so built-in and external recommendations
@@ -29,21 +35,41 @@ local function read_file(path)
   return bytes or ""
 end
 
-local function parse(bytes, rows)
+local function append_unique(list, value)
+  for _, existing in ipairs(list) do
+    if existing == value then return end
+  end
+  list[#list + 1] = value
+end
+
+local function parse(bytes, rows, patterns, pat_index, errors)
   for line in bytes:gmatch("[^\n]+") do
     if not line:match("^%s*$") and not line:match("^%s*#") then
       local word, expression = line:match("^([^\t]+)\t([^\t]+)\r?$")
       if word and expression then
-        local list = rows[word]
-        if not list then
-          list = {}
-          rows[word] = list
+        if #word >= 2 and word:sub(1, 1) == "/" and word:sub(-1) == "/" then
+          local pat = word:sub(2, -2)
+          if pat ~= "" then
+            if pcall(string.find, "x", pat) then
+              local list = pat_index[pat]
+              if not list then
+                list = {}
+                pat_index[pat] = list
+                patterns[#patterns + 1] = { pat = pat, exprs = list }
+              end
+              append_unique(list, expression)
+            else
+              errors[#errors + 1] = "invalid Lua pattern: " .. word
+            end
+          end
+        else
+          local list = rows[word]
+          if not list then
+            list = {}
+            rows[word] = list
+          end
+          append_unique(list, expression)
         end
-        local seen = false
-        for _, existing in ipairs(list) do
-          if existing == expression then seen = true; break end
-        end
-        if not seen then list[#list + 1] = expression end
       end
     end
   end
@@ -54,6 +80,7 @@ local function refresh(env, ctx)
   local supplied, err = read_file(env.supplied_path)
   if not supplied then
     kind.rows = kind.rows or {}
+    kind.patterns = kind.patterns or {}
     if ctx:get_property("_wetype_expressions_error") ~= err then
       ctx:set_property("_wetype_expressions_error", err)
     end
@@ -61,13 +88,16 @@ local function refresh(env, ctx)
   end
   local personal = read_file(env.personal_path) or ""
   if supplied ~= kind.supplied or personal ~= kind.personal then
-    local rows = {}
-    parse(supplied, rows)
-    parse(personal, rows)
-    kind.supplied, kind.personal, kind.rows = supplied, personal, rows
+    local rows, patterns, pat_index, errors = {}, {}, {}, {}
+    parse(supplied, rows, patterns, pat_index, errors)
+    parse(personal, rows, patterns, pat_index, errors)
+    kind.supplied, kind.personal = supplied, personal
+    kind.rows, kind.patterns = rows, patterns
+    kind.pattern_error = errors[1]
   end
-  if ctx:get_property("_wetype_expressions_error") ~= "" then
-    ctx:set_property("_wetype_expressions_error", "")
+  local message = kind.pattern_error or ""
+  if ctx:get_property("_wetype_expressions_error") ~= message then
+    ctx:set_property("_wetype_expressions_error", message)
   end
   return kind.rows
 end
@@ -99,13 +129,35 @@ local function make(kind, file, option, native_bit, candidate_type, comment_word
       return
     end
     local rows = refresh(env, ctx)
+    local patterns = state[env.kind].patterns
+    local has_patterns = #patterns > 0
     for candidate in translation:iter() do
       yield(candidate)
-      local expressions = rows[candidate.text]
-      if expressions then
-        for _, expression in ipairs(expressions) do
+      local text = candidate.text
+      local list = rows[text]
+      if list then
+        for _, expression in ipairs(list) do
           yield(ShadowCandidate(candidate, env.candidate_type, expression,
-                                env.comment_word and candidate.text or ""))
+                                env.comment_word and text or ""))
+        end
+      end
+      if has_patterns then
+        local seen
+        if list then
+          seen = {}
+          for _, expression in ipairs(list) do seen[expression] = true end
+        end
+        for _, p in ipairs(patterns) do
+          if string.find(text, p.pat) then
+            if not seen then seen = {} end
+            for _, expression in ipairs(p.exprs) do
+              if not seen[expression] then
+                seen[expression] = true
+                yield(ShadowCandidate(candidate, env.candidate_type, expression,
+                                      env.comment_word and text or ""))
+              end
+            end
+          end
         end
       end
     end
