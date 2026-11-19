@@ -59,6 +59,90 @@ local function compile_extended(src)
     return tail ~= nil and #tail == #s
   end
   local parse_atom
+  -- A UTF-8 length prefix is 194-244; the continuation bytes are 128-191.
+  local function utf8_len(b) return b >= 240 and 4 or (b >= 224 and 3 or 2) end
+  -- True when s repeats safely as a native unit (single byte, [class], %x, .):
+  -- appending * + - ? to it stays exact. Multibyte chars and multi-char
+  -- sequences are rejected because Lua quantifiers bind to one byte.
+  local function is_byte_unit(s)
+    if s:sub(1, 1) == "[" and s:sub(-1) == "]" then return true end
+    if #s == 1 then return true end
+    if #s == 2 and s:sub(1, 1) == "%" then return true end
+    return false
+  end
+  -- Lua character classes are byte-based: [蛋卵] would match any single byte
+  -- of those characters, so 说 (E8 AF B4) matches 蛋 (E8 9B 8B) via E8. A
+  -- class holding multibyte characters must expand to per-character
+  -- alternation; pure-byte classes stay native.
+  local function class_chars(s)
+    local inner = s:sub(2, -2)
+    local negated = inner:sub(1, 1) == "^"
+    if negated then inner = inner:sub(2) end
+    local items, i, multi = {}, 1, false
+    if inner:sub(1, 1) == "]" then
+      items[#items + 1] = "[]]"
+      inner = inner:sub(2)
+    end
+    -- Read one class member at `at`: returns the member's pattern, whether it
+    -- is a multibyte character, whether it was %-escaped, and the next index.
+    local function member(at)
+      local c = inner:sub(at, at)
+      if c == "%" then
+        local nx = inner:sub(at + 1, at + 1)
+        if nx == "" then return nil, "trailing % in class" end
+        local nb = nx:byte()
+        if nb >= 194 and nb <= 244 then
+          local want = utf8_len(nb)
+          local j = at + 2
+          while j <= #inner and j - (at + 1) < want do
+            local cb = inner:byte(j)
+            if cb >= 128 and cb <= 191 then j = j + 1 else break end
+          end
+          if j - (at + 1) < want then return nil, "truncated UTF-8 in class" end
+          -- % escapes only matter for magic bytes; a multibyte character is
+          -- already literal, so drop the escape and expand per character.
+          return inner:sub(at + 1, j - 1), true, true, j
+        end
+        return "%" .. nx, false, true, at + 2
+      end
+      local b = inner:byte(at)
+      if b >= 194 and b <= 244 then
+        local want = utf8_len(b)
+        local j = at + 1
+        while j <= #inner and j - at < want do
+          local cb = inner:byte(j)
+          if cb >= 128 and cb <= 191 then j = j + 1 else break end
+        end
+        if j - at < want then return nil, "truncated UTF-8 in class" end
+        return inner:sub(at, j - 1), true, false, j
+      end
+      -- Wrap single-byte members as one-char classes so a later ? suffix binds
+      -- to the whole member and class metacharacters stay literal.
+      local ch = c
+      if ch:find("[^%w]") then ch = "%" .. ch end
+      return "[" .. ch .. "]", false, false, at + 1
+    end
+    while i <= #inner do
+      local item, extra, escaped, nxt = member(i)
+      if not item then return nil, extra end
+      -- A dash between two members is a range. The upper bound cannot be
+      -- multibyte: [蛋-卵] has no byte-wise equivalent.
+      if inner:sub(nxt, nxt) == "-" and inner:sub(nxt + 1, nxt + 1) ~= "" then
+        if extra then return nil, "multibyte range in class" end
+        if escaped then return nil, "escaped range in class" end
+        local hi = inner:byte(nxt + 1)
+        if hi >= 128 then return nil, "multibyte range in class" end
+        if inner:byte(i) > hi then return nil, "reversed range in class" end
+        items[#items + 1] = "[" .. inner:sub(i, i) .. "-" .. inner:sub(nxt + 1, nxt + 1) .. "]"
+        i = nxt + 2
+      else
+        if extra then multi = true end
+        items[#items + 1] = item
+        i = nxt
+      end
+    end
+    return items, negated, multi
+  end
   local function parse_expr()
     local branches = {}
     while true do
@@ -68,7 +152,12 @@ local function compile_extended(src)
         local c = peek()
         if c == "*" or c == "+" or c == "-" or c == "?" then
           pos = pos + 1
-          if atom.kind == "lit" and is_multibyte(atom.s) then
+          if atom.kind == "class" then
+            if c ~= "?" then
+              return nil, "unbounded repetition of a multibyte class; use {n,m}"
+            end
+            seq[#seq + 1] = { kind = "range", atom = atom, n = 0, m = 1 }
+          elseif atom.kind == "lit" and is_multibyte(atom.s) then
             -- Native */+/-/? repeat a single byte only, which would corrupt a
             -- multibyte character. ? is bounded: expand as {0,1}. Unbounded
             -- repetition of a multibyte sequence cannot be expressed as a
@@ -128,6 +217,16 @@ local function compile_extended(src)
       if j > #src then error("unclosed [") end
       local s = src:sub(pos, j)
       pos = j + 1
+      if s:find("[\194-\244]") then
+        local items, negated, multi = class_chars(s)
+        if not items then error(negated) end
+        if negated and multi then
+          error("negated multibyte class cannot expand exactly; list characters positively")
+        end
+        if multi then return { kind = "class", items = items } end
+        -- No multibyte member (e.g. a class of lone continuation bytes): the
+        -- byte-based semantics are exactly what was written, keep it native.
+      end
       return { kind = "lit", s = s }
     elseif c == "(" then
       pos = pos + 1
@@ -164,29 +263,70 @@ local function compile_extended(src)
       return { node.s }
     elseif node.kind == "group" then
       return expand(node.node)
-    elseif node.kind == "rep" then
+    elseif node.kind == "class" then
+      -- Each member becomes its own alternative so matching is per character,
+      -- never per byte. Quantifiers on the class multiply via the cartesian
+      -- product in seq, bounded by EXPAND_CAP.
       local out = {}
-      for _, s in ipairs(expand(node.atom)) do out[#out + 1] = s .. node.q end
+      for _, item in ipairs(node.items) do
+        out[#out + 1] = item
+        if #out > EXPAND_CAP then return nil, "pattern expands too large" end
+      end
+      return out
+    elseif node.kind == "rep" then
+      local base, berr = expand(node.atom)
+      if not base then return nil, berr or "bad node" end
+      local out = {}
+      if node.q == "?" then
+        local exact_native = true
+        for _, s in ipairs(base) do
+          if not is_byte_unit(s) then exact_native = false end
+        end
+        if exact_native then
+          for _, s in ipairs(base) do out[#out + 1] = s .. "?" end
+        else
+          -- Native ? binds to the last byte, so (大利)? would mean 大 + 利?.
+          -- Expand to the empty string plus each whole alternative instead.
+          out[1] = ""
+          for _, s in ipairs(base) do out[#out + 1] = s end
+        end
+      else
+        for _, s in ipairs(base) do
+          if not is_byte_unit(s) then
+            return nil, "unbounded repetition needs a single byte, class or .; use {n,m}"
+          end
+          out[#out + 1] = s .. node.q
+        end
+      end
       return out
     elseif node.kind == "range" then
-      local base = expand(node.atom)
+      local base, berr = expand(node.atom)
+      if not base then return nil, berr or "bad node" end
       local out = {}
-      for _, s in ipairs(base) do
-        -- Lua's ? quantifier binds to one byte only, so a multibyte UTF-8
-        -- literal cannot take s? per optional copy. Expand n mandatory copies
-        -- plus one alternative per optional count instead (still exact).
-        local unit, opt = s, s .. "?"
-        if #s > 1 and s:sub(1, 1) ~= "%" and s:sub(1, 1) ~= "[" then
-          local tail = s:match("([\194-\244][\128-\191]*)$")
-          if tail and #tail == #s then
-            opt = nil
+      -- A single unit that repeats natively (single byte, class, %x, .) can be
+      -- written compactly, e.g. [0-9]{2,3} -> [0-9][0-9][0-9]?.
+      if #base == 1 and is_byte_unit(base[1]) then
+        local unit = base[1]
+        out[1] = unit:rep(node.n) .. string.rep(unit .. "?", node.m - node.n)
+        return out
+      end
+      -- Otherwise every count and every member combination is its own
+      -- alternative: [蛋卵]{2} -> 蛋蛋 | 蛋卵 | 卵蛋 | 卵卵. Each member is a
+      -- whole character, so matching never falls back to byte semantics.
+      local acc = { "" }
+      if node.n == 0 then out[1] = "" end
+      for k = 1, node.m do
+        local next_acc = {}
+        for _, a in ipairs(acc) do
+          for _, b in ipairs(base) do
+            next_acc[#next_acc + 1] = a .. b
+            if #next_acc > EXPAND_CAP then return nil, "pattern expands too large" end
           end
         end
-        if opt then
-          out[#out + 1] = unit:rep(node.n) .. opt:rep(node.m - node.n)
-        else
-          for k = node.n, node.m do
-            out[#out + 1] = unit:rep(k)
+        acc = next_acc
+        if k >= node.n then
+          for _, s in ipairs(acc) do
+            out[#out + 1] = s
             if #out > EXPAND_CAP then return nil, "pattern expands too large" end
           end
         end
@@ -195,8 +335,8 @@ local function compile_extended(src)
     elseif node.kind == "seq" then
       local acc = { "" }
       for _, item in ipairs(node.items) do
-        local part = expand(item)
-        if not part then return nil, "pattern expands too large" end
+        local part, perr = expand(item)
+        if not part then return nil, perr or "pattern expands too large" end
         local next_acc = {}
         for _, a in ipairs(acc) do
           for _, b in ipairs(part) do
@@ -210,8 +350,8 @@ local function compile_extended(src)
     elseif node.kind == "alt" then
       local out = {}
       for _, branch in ipairs(node.branches) do
-        local part = expand(branch)
-        if not part then return nil, "pattern expands too large" end
+        local part, perr = expand(branch)
+        if not part then return nil, perr or "pattern expands too large" end
         for _, s in ipairs(part) do
           out[#out + 1] = s
           if #out > EXPAND_CAP then return nil, "pattern expands too large" end

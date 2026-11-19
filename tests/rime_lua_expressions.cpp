@@ -96,6 +96,18 @@ int main(int argc,char **argv){
   restamp("wetype_emoji.custom.tsv");
   menu=rows(id,"ceshi");
   require(!contains(menu,"🧬"),"malformed pattern was not skipped");
+  // Byte-wise Lua classes used to match unrelated characters that share a UTF-8
+  // lead byte (试 and 蛋 both start with E8), so 测试 picked up the egg and grape
+  // expressions. A class holding multibyte characters now expands to per
+  // character alternatives; pure byte classes keep native semantics.
+  {std::ofstream out(user+"/wetype_emoji.custom.tsv",std::ios::app);
+   out<<"/^[蛋卵]$/\t🥚\n/^[鸡鸭鹅鸟]?[蛋卵]$/\t🥚\n"
+      <<"/^[葡蒲匍][葡陶萄桃匋]$/\t🍇\n/^[测试]$/\t🧫\n";}
+  restamp("wetype_emoji.custom.tsv");
+  menu=rows(id,"ceshi");
+  require(!contains(menu,"🥚"),"byte-wise class matched 测试 via a shared lead byte");
+  require(!contains(menu,"🍇"),"alternation-expanded class matched 测试");
+  require(contains(menu,"🧫"),"multibyte class no longer matches its own characters");
   api->destroy_session(id);
 
   // Phase 2: binding the native engine must switch the Lua tables aside, and

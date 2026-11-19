@@ -64,6 +64,33 @@ skipped and reported through `_wetype_expressions_error`. Plain keys containing
 pattern metacharacters (such as `科科斯(基林)群岛`) remain literal because they
 are not wrapped in `/.../`.
 
+A `?` after a group also has whole-sequence meaning: `(大利)?` matches either
+nothing or `大利`, not `大` with an optional `利`.
+
+### Multibyte character classes
+
+Lua character classes are byte-based, so before expansion `[蛋卵]` matched any
+single byte of those characters — including 说 and 试, which share the `E8`
+lead byte with 蛋. To keep classes usable with Chinese text, a class holding
+multibyte characters is compiled to per-character alternatives instead:
+
+```text
+/[鸡鸭鹅鸟]?[蛋卵]/	🥚	matches 蛋, 鸡蛋, 鸟蛋 … but not 说 or 还有
+/[葡蒲匍][葡陶萄桃匋]/	🍇	matches 葡萄, 蒲桃 … but not 菩萨
+```
+
+Inside such a class:
+
+- `?` is exact and covers the whole character; `{n,m}` expands across every
+  member combination (`[蛋卵]{2}` covers 蛋蛋, 蛋卵, 卵蛋, 卵卵), still bounded
+  by the 256-pattern cap.
+- `*`, `+` and `-` are rejected; write `{n,m}` instead.
+- Negated classes (`[^蛋卵]`) and multibyte ranges (`[一-丁]`) are rejected
+  because no exact native pattern exists; list the characters positively, or
+  split the key.
+- Classes of ASCII bytes only keep native semantics, including `[a-z]`,
+  `[0-9]`, `[^abc]` and `%a`, so existing keys are unaffected.
+
 The tables are ordinary source files: edit the checkout's `data/wetype_*.tsv`
 to change the default for new installations, or edit the installed copies
 directly. They carry no engine resources, network data or personal learning.
@@ -169,8 +196,9 @@ be added to the symbol table as literal text.
 
 `python3 tests/smoke_lua_expressions.py` checks the external tables through
 real librime: matching, filter order, kaomoji comments, literal commit,
-independent options, overlay hot reload, the native step-aside guard and
-literal OpenCC output.
+independent options, overlay hot reload, the native step-aside guard, literal
+OpenCC output, and that multibyte classes no longer match unrelated characters
+sharing a UTF-8 lead byte.
 
 `python3 tests/smoke_expressions.py --mainland-dir /path/to/generated/package` checks native kaomoji and symbols, independent
 Unicode Emoji settings, double pinyin, native selection, official personal
