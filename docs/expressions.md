@@ -46,10 +46,23 @@ many words:
 ```
 
 Literal keys stay exact; only `/.../` keys are scanned as patterns, so keep the
-pattern keys few to avoid per-candidate overhead. Lua patterns support `.^$[]%a%d*+-?()`
-but not `|`, `{n,m}` or lookahead. A malformed pattern is skipped and reported
-through `_wetype_expressions_error`. Plain keys containing pattern metacharacters
-(such as `科科斯(基林)群岛`) remain literal because they are not wrapped in `/.../`.
+pattern keys few to avoid per-candidate overhead. Lua patterns support `.^$[]%a%d*+-?()`;
+on top of them the tables add two extensions, compiled into native Lua patterns
+when a table loads, so matching itself stays a plain `string.find`:
+
+- `|` alternation: `/^(测试|你好)$/	🎉` matches either word.
+- `{n,m}` bounded repetition of the preceding character, class or `.`:
+  `/^测{1,2}试$/	🎠` matches 测试 and 测测试; `{n}` means exactly n copies.
+
+Limits: repetition applies to a single character (or a class or `.`), never to
+a group or an anchor; `m ≤ 64` and `n ≤ m`; one key expands to at most 256
+native patterns. Unbounded `*`, `+`, `-` on a multibyte character are rejected
+because Lua quantifiers repeat single bytes — use `{n,m}` instead; `?` on a
+multibyte character is accepted and expanded exactly. Escape literal `|`, `{`
+and `}` as `%|`, `%{`, `%}`. There is no lookahead. A malformed pattern is
+skipped and reported through `_wetype_expressions_error`. Plain keys containing
+pattern metacharacters (such as `科科斯(基林)群岛`) remain literal because they
+are not wrapped in `/.../`.
 
 The tables are ordinary source files: edit the checkout's `data/wetype_*.tsv`
 to change the default for new installations, or edit the installed copies

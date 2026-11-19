@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Extend `/.../` expression keys with `|` alternation and `{n,m}` bounded repetition, compiled at table load into native Lua patterns so matching stays `string.find`. Repetition binds to one character, class or `.` (not groups or anchors), with `m ≤ 64` and a 256-pattern expansion cap per key; unbounded multibyte quantifiers are rejected in favour of `{n,m}`. Measured on real Lua 5.4, 100 expanded patterns across 50 candidates add about 0.5 ms per keystroke while literal keys keep zero-overhead hash matching. Cover the extensions, deduplication and error reporting in the acceptance test and document the limits.
+
 - Add hybrid pattern matching to the external expression tables: a plain key stays an exact literal (hash) match, while a key wrapped in `/.../` is a Lua pattern matched with `string.find`, so one pattern can cover many words. Pattern keys are scanned per candidate, separate from the literal hash, to preserve typing speed; malformed patterns are skipped and reported. Update the expression acceptance test for the current filter order and cover pattern matching.
 
 - Stop forcing display preferences in the schemes. Candidate page size now follows Rime's `menu/page_size` default instead of a hardcoded eight, and the fuzzy head window and per-branch fuzzy candidate count become ordinary settings (`wetype/head_candidates`, `wetype/fuzzy_candidates`, both defaulting to three) rather than fixed constants.

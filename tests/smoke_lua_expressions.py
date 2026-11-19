@@ -12,7 +12,7 @@ if not (ROOT / 'build/wetype-worker').exists() or not (ROOT / 'build/librime-wet
 stage(base / 'user', base / 'runtime', copy_engine=False)
 (base / 'logs').mkdir()
 user = base / 'user'
-(user / 'default.custom.yaml').write_text('patch:\n  schema_list:\n    - schema: wetype\n')
+(user / 'default.custom.yaml').write_text('patch:\n  schema_list:\n    - schema: wetype\n  menu/page_size: 20\n')
 # Isolate the mechanism from the shipped supplied tables: empty bodies, then
 # fixture rows in the personal overlays exercise merging and hot reload.
 for name in ('wetype_emoji.tsv', 'wetype_kaomoji.tsv', 'wetype_symbols.tsv'):

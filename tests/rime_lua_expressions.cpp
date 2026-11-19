@@ -64,6 +64,38 @@ int main(int argc,char **argv){
   {std::ofstream out(user+"/wetype_emoji.custom.tsv",std::ios::app);out<<"/^测/\t🧪\n";}
   require(contains(rows(id,"ceshi"),"🧪"),"Lua pattern key did not match 测试");
   require(!contains(rows(id,"nihao"),"🧪"),"pattern leaked to a non-matching input");
+  // Extended syntax: | alternation and {n,m} bounded repetition compile to
+  // native patterns; one extended key can carry several expressions.
+  {std::ofstream out(user+"/wetype_emoji.custom.tsv",std::ios::app);
+   out<<"/^(测试|你好)$/\t🎉\n/^(测试|你好)$/\t🔬\n/^测{1,2}试$/\t🎠\n";}
+  menu=rows(id,"ceshi");
+  require(contains(menu,"🎉")&&contains(menu,"🔬"),"alternation key did not match 测试");
+  require(contains(menu,"🎠"),"multibyte {n,m} key did not match 测试");
+  menu=rows(id,"nihao");
+  require(contains(menu,"🎉")&&contains(menu,"🔬"),"alternation key did not match 你好");
+  require(!contains(menu,"🎠"),"{n,m} key leaked to a non-matching input");
+  // A literal and a pattern match for the same expression deduplicate.
+  {std::ofstream out(user+"/wetype_emoji.custom.tsv",std::ios::app);out<<"测试\t🎉\n";}
+  menu=rows(id,"ceshi");
+  require(std::count_if(menu.begin(),menu.end(),[](const Row &row){return row.first=="🎉";})==1,
+          "literal and pattern matches duplicated one expression");
+  // A malformed extended pattern is skipped and reported, then cleared on edit.
+  // Stamp a fresh mtime so the byte-change hot reload is not lost to filesystem
+  // timestamp granularity between rapid successive appends.
+  auto restamp=[&](const std::string &name){
+   auto stamp=std::time(nullptr)+2;timespec times[2]={{stamp,0},{stamp,0}};
+   require(!utimensat(AT_FDCWD,(user+"/"+name).c_str(),times,0),"cannot stamp the overlay");};
+  {std::ofstream out(user+"/wetype_emoji.custom.tsv",std::ios::app);out<<"/哈{5,2}/\t🧬\n";}
+  restamp("wetype_emoji.custom.tsv");
+  bool reported=false;std::string seen_error;
+  try{rows(id,"ceshi");}catch(const std::exception &e){seen_error=e.what();reported=seen_error.find("哈{5,2}")!=std::string::npos;}
+  require(reported,("malformed extended pattern not reported; saw: "+seen_error).c_str());
+  {std::ofstream out(user+"/wetype_emoji.custom.tsv");
+   out<<"# personal emoji\n测试\t🍄\n测试\t🎃\n/^测/\t🧪\n"
+      <<"/^(测试|你好)$/\t🎉\n/^(测试|你好)$/\t🔬\n/^测{1,2}试$/\t🎠\n测试\t🎉\n";}
+  restamp("wetype_emoji.custom.tsv");
+  menu=rows(id,"ceshi");
+  require(!contains(menu,"🧬"),"malformed pattern was not skipped");
   api->destroy_session(id);
 
   // Phase 2: binding the native engine must switch the Lua tables aside, and
