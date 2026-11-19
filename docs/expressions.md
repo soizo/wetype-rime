@@ -55,8 +55,11 @@ when a table loads, so matching itself stays a plain `string.find`:
   `/^测{1,2}试$/	🎠` matches 测试 and 测测试; `{n}` means exactly n copies.
 
 Limits: repetition applies to a single character (or a class or `.`), never to
-a group or an anchor; `m ≤ 64` and `n ≤ m`; one key expands to at most 256
-native patterns. Unbounded `*`, `+`, `-` on a multibyte character are rejected
+a group or an anchor; `m ≤ 64` and `n ≤ m`; one key expands to at most 1024
+native patterns. When a key needs many patterns because of long optional
+chains, it also carries a prefilter: the longest literal text every match must
+contain is checked once per candidate, so unrelated candidates skip the whole
+scan. Unbounded `*`, `+`, `-` on a multibyte character are rejected
 because Lua quantifiers repeat single bytes — use `{n,m}` instead; `?` on a
 multibyte character is accepted and expanded exactly. Escape literal `|`, `{`
 and `}` as `%|`, `%{`, `%}`. There is no lookahead. A malformed pattern is
@@ -83,7 +86,7 @@ Inside such a class:
 
 - `?` is exact and covers the whole character; `{n,m}` expands across every
   member combination (`[蛋卵]{2}` covers 蛋蛋, 蛋卵, 卵蛋, 卵卵), still bounded
-  by the 256-pattern cap.
+  by the 1024-pattern cap.
 - `*`, `+` and `-` are rejected; write `{n,m}` instead.
 - Negated classes (`[^蛋卵]`) and multibyte ranges (`[一-丁]`) are rejected
   because no exact native pattern exists; list the characters positively, or

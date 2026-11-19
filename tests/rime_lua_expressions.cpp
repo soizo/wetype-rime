@@ -108,6 +108,14 @@ int main(int argc,char **argv){
   require(!contains(menu,"🥚"),"byte-wise class matched 测试 via a shared lead byte");
   require(!contains(menu,"🍇"),"alternation-expanded class matched 测试");
   require(contains(menu,"🧫"),"multibyte class no longer matches its own characters");
+  // A key whose optional parts multiply past the former 256-pattern cap still
+  // compiles (512 patterns here) and matches; its mandatory-literal prefilter
+  // keeps candidates without 测试 cheap.
+  {std::ofstream out(user+"/wetype_emoji.custom.tsv",std::ios::app);
+   out<<"/^的?的?的?的?的?的?的?的?的?测试$/\t🧿\n";}
+  restamp("wetype_emoji.custom.tsv");
+  menu=rows(id,"ceshi");
+  require(contains(menu,"🧿"),"large expanded key did not compile or match");
   api->destroy_session(id);
 
   // Phase 2: binding the native engine must switch the Lua tables aside, and

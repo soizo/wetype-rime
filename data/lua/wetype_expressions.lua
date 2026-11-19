@@ -47,7 +47,9 @@ end
 -- repetition) on top of Lua patterns; no lookahead. Alternation and repetition
 -- are expanded into separate native patterns (cartesian product), capped to
 -- keep the per-candidate scan small. Escape literal | { } as %| %{ %}.
-local EXPAND_CAP = 256
+local EXPAND_CAP = 1024
+local TOO_LARGE = "pattern expands to more than " .. EXPAND_CAP
+                .. " native patterns; remove some optional parts"
 
 local function compile_extended(src)
   local pos = 1
@@ -270,7 +272,7 @@ local function compile_extended(src)
       local out = {}
       for _, item in ipairs(node.items) do
         out[#out + 1] = item
-        if #out > EXPAND_CAP then return nil, "pattern expands too large" end
+        if #out > EXPAND_CAP then return nil, TOO_LARGE end
       end
       return out
     elseif node.kind == "rep" then
@@ -320,14 +322,14 @@ local function compile_extended(src)
         for _, a in ipairs(acc) do
           for _, b in ipairs(base) do
             next_acc[#next_acc + 1] = a .. b
-            if #next_acc > EXPAND_CAP then return nil, "pattern expands too large" end
+            if #next_acc > EXPAND_CAP then return nil, TOO_LARGE end
           end
         end
         acc = next_acc
         if k >= node.n then
           for _, s in ipairs(acc) do
             out[#out + 1] = s
-            if #out > EXPAND_CAP then return nil, "pattern expands too large" end
+            if #out > EXPAND_CAP then return nil, TOO_LARGE end
           end
         end
       end
@@ -336,12 +338,12 @@ local function compile_extended(src)
       local acc = { "" }
       for _, item in ipairs(node.items) do
         local part, perr = expand(item)
-        if not part then return nil, perr or "pattern expands too large" end
+        if not part then return nil, perr or TOO_LARGE end
         local next_acc = {}
         for _, a in ipairs(acc) do
           for _, b in ipairs(part) do
             next_acc[#next_acc + 1] = a .. b
-            if #next_acc > EXPAND_CAP then return nil, "pattern expands too large" end
+            if #next_acc > EXPAND_CAP then return nil, TOO_LARGE end
           end
         end
         acc = next_acc
@@ -351,15 +353,75 @@ local function compile_extended(src)
       local out = {}
       for _, branch in ipairs(node.branches) do
         local part, perr = expand(branch)
-        if not part then return nil, perr or "pattern expands too large" end
+        if not part then return nil, perr or TOO_LARGE end
         for _, s in ipairs(part) do
           out[#out + 1] = s
-          if #out > EXPAND_CAP then return nil, "pattern expands too large" end
+          if #out > EXPAND_CAP then return nil, TOO_LARGE end
         end
       end
       return out
     end
     return nil, "bad node"
+  end
+  -- Conservative prefilter: the longest literal string that every match must
+  -- contain. A key that needs hundreds of native patterns is checked against
+  -- this single string first, so unrelated candidates skip the whole scan.
+  local function is_literal(s)
+    if s == "." then return false end
+    if s:sub(1, 1) == "%" then
+      -- %d and friends are classes; %%. %. and friends are literal bytes.
+      return not s:sub(2, 2):find("%a")
+    end
+    return true
+  end
+  local required
+  required = function(node)
+    local kind = node.kind
+    if kind == "lit" then
+      if is_literal(node.s) then return { node.s } end
+    elseif kind == "class" then
+      local only = node.items[1]
+      -- A single multibyte member is literal; a native byte class is not.
+      if #node.items == 1 and only and only:sub(1, 1) ~= "[" and only:sub(1, 1) ~= "%" then
+        return { only }
+      end
+    elseif kind == "group" then
+      return required(node.node)
+    elseif kind == "rep" then
+      if node.q ~= "?" then return required(node.atom) end
+    elseif kind == "range" then
+      if node.n > 0 then return required(node.atom) end
+    elseif kind == "seq" then
+      local out = {}
+      for _, item in ipairs(node.items) do
+        for _, s in ipairs(required(item)) do out[#out + 1] = s end
+      end
+      return out
+    elseif kind == "alt" then
+      -- Only a string required by every branch is safe to require overall.
+      local out = {}
+      local branches = node.branches
+      for _, s in ipairs(required(branches[1])) do
+        local everywhere = true
+        for i = 2, #branches do
+          local found = false
+          for _, t in ipairs(required(branches[i])) do
+            if t:find(s, 1, true) then found = true break end
+          end
+          if not found then everywhere = false break end
+        end
+        if everywhere then out[#out + 1] = s end
+      end
+      return out
+    end
+    return {}
+  end
+  local function prefilter(node)
+    local best
+    for _, s in ipairs(required(node)) do
+      if not best or #s > #best then best = s end
+    end
+    return best
   end
   local ok, node, perr = pcall(parse_expr)
   if not ok then return nil, tostring(node) end
@@ -371,7 +433,7 @@ local function compile_extended(src)
   for _, p in ipairs(pats) do
     if not pcall(string.find, "x", p) then return nil, "invalid generated pattern" end
   end
-  return pats
+  return pats, nil, prefilter(node)
 end
 
 local function parse(bytes, rows, patterns, pat_index, errors)
@@ -382,15 +444,13 @@ local function parse(bytes, rows, patterns, pat_index, errors)
         if #word >= 2 and word:sub(1, 1) == "/" and word:sub(-1) == "/" then
           local pat = word:sub(2, -2)
           if pat ~= "" then
-            local pats, perr = compile_extended(pat)
+            local pats, perr, need = compile_extended(pat)
             if pats then
               local list = pat_index[pat]
               if not list then
                 list = {}
                 pat_index[pat] = list
-                for _, p in ipairs(pats) do
-                  patterns[#patterns + 1] = { pat = p, exprs = list }
-                end
+                patterns[#patterns + 1] = { pats = pats, need = need, exprs = list }
               end
               append_unique(list, expression)
             else
@@ -497,14 +557,22 @@ local function make(kind, file, option, native_bit, candidate_type, comment_word
           seen = {}
           for _, expression in ipairs(list) do seen[expression] = true end
         end
-        for _, p in ipairs(patterns) do
-          if string.find(text, p.pat) then
-            if not seen then seen = {} end
-            for _, expression in ipairs(p.exprs) do
-              if not seen[expression] then
-                seen[expression] = true
-                yield(ShadowCandidate(candidate, env.candidate_type, expression,
-                                      env.comment_word and text or ""))
+        for _, group in ipairs(patterns) do
+          -- One prefilter lookup per key skips keys whose mandatory text is
+          -- absent, so a key expanding into hundreds of patterns stays cheap.
+          if group.need == nil or string.find(text, group.need) then
+            local matched = false
+            for _, p in ipairs(group.pats) do
+              if string.find(text, p) then matched = true break end
+            end
+            if matched then
+              if not seen then seen = {} end
+              for _, expression in ipairs(group.exprs) do
+                if not seen[expression] then
+                  seen[expression] = true
+                  yield(ShadowCandidate(candidate, env.candidate_type, expression,
+                                        env.comment_word and text or ""))
+                end
               end
             end
           end
